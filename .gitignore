@@ -1,0 +1,17 @@
+# General
+.DS_Store
+.idea/
+*.iml
+*.log
+
+# Backend
+backend/node_modules/
+backend/.env
+
+# Frontend
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/.pub/
+frontend/build/

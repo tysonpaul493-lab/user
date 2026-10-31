@@ -1,0 +1,751 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/app_localizations.dart';
+import '../../../core/services/route_service.dart';
+import '../../../models/booking_model.dart';
+import '../../../models/driver_model.dart';
+import '../../../shared/widgets/custom_map_widget.dart';
+import '../../../shared/widgets/driver_tracking_card.dart';
+import '../../../shared/widgets/route_progress_bar.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../booking/providers/booking_provider.dart';
+import 'chat_sheet.dart';
+
+class LiveTrackingScreen extends ConsumerStatefulWidget {
+  const LiveTrackingScreen({super.key});
+
+  @override
+  ConsumerState<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
+}
+
+class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
+  bool _isDetailsExpanded = false;
+  List<LatLng>? _ambulanceRoadRoute;
+  List<LatLng>? _hospitalRoadRoute;
+  List<LatLng>? _initialFullAmbulanceRoute;
+  String? _lastRouteKey;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchRoadRoutes();
+    });
+  }
+
+  Future<void> _fetchRoadRoutes() async {
+    final bookingState = ref.read(bookingProvider);
+    final booking = bookingState.activeBooking;
+    final driver = booking?.driver;
+
+    final userLat = booking?.pickupLat ?? bookingState.currentLat;
+    final userLng = booking?.pickupLng ?? bookingState.currentLng;
+    final driverLat = driver?.currentLat ?? (userLat - 0.012);
+    final driverLng = driver?.currentLng ?? (userLng - 0.008);
+
+    final currentKey = '$driverLat,$driverLng->$userLat,$userLng';
+    if (_lastRouteKey == currentKey && _ambulanceRoadRoute != null) return;
+    _lastRouteKey = currentKey;
+
+    try {
+      final ambRoute = await RouteService.getRoadRoute(
+        LatLng(driverLat, driverLng),
+        LatLng(userLat, userLng),
+      );
+
+      _initialFullAmbulanceRoute ??= List<LatLng>.from(ambRoute);
+
+      List<LatLng>? hospRoute;
+      final hospital = booking?.destinationHospital;
+      if (hospital != null) {
+        hospRoute = await RouteService.getRoadRoute(
+          LatLng(userLat, userLng),
+          LatLng(hospital.lat, hospital.lng),
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _ambulanceRoadRoute = ambRoute;
+          _hospitalRoadRoute = hospRoute;
+        });
+      }
+    } catch (_) {}
+  }
+
+  double _calculateProgress(LatLng driverPos) {
+    final full = _initialFullAmbulanceRoute;
+    if (full == null || full.length < 2) return 0.15;
+
+    int closestIdx = 0;
+    double minDistance = double.infinity;
+    for (int i = 0; i < full.length; i++) {
+      final dist = (full[i].latitude - driverPos.latitude).abs() +
+          (full[i].longitude - driverPos.longitude).abs();
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIdx = i;
+      }
+    }
+
+    final frac = closestIdx / (full.length - 1);
+    return frac.clamp(0.08, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bookingState = ref.watch(bookingProvider);
+    final authState = ref.watch(authProvider);
+    final locale = authState.selectedLocale;
+    final booking = bookingState.activeBooking;
+    final driver = booking?.driver;
+
+    final userLat = booking?.pickupLat ?? bookingState.currentLat;
+    final userLng = booking?.pickupLng ?? bookingState.currentLng;
+    final driverLat = driver?.currentLat ?? (userLat - 0.012);
+    final driverLng = driver?.currentLng ?? (userLng - 0.008);
+
+    final driverPos = LatLng(driverLat, driverLng);
+    final isArrived = booking?.status == BookingStatus.driverArrived;
+
+    final dynamicProgress = isArrived ? 1.0 : _calculateProgress(driverPos);
+    final dynamicEta = isArrived ? 0 : (booking?.etaMinutes ?? ((1.0 - dynamicProgress) * 5).ceil().clamp(0, 5));
+
+    // Refresh road routes if driver coordinates moved
+    final currentKey = '$driverLat,$driverLng->$userLat,$userLng';
+    if (_lastRouteKey != currentKey) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchRoadRoutes());
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // 1. Interactive Map View with Real Road Pathways (OSRM)
+          Positioned.fill(
+            child: CustomMapWidget(
+              center: LatLng((driverLat + userLat) / 2, (driverLng + userLng) / 2),
+              zoom: 14.8,
+              userPosition: LatLng(userLat, userLng),
+              driverPosition: driverPos,
+              driverHeading: driver?.heading ?? 45.0,
+              routePoints: _ambulanceRoadRoute,
+              hospitalPosition: booking?.destinationHospital != null
+                  ? LatLng(booking!.destinationHospital!.lat, booking.destinationHospital!.lng)
+                  : null,
+              hospitalName: booking?.destinationHospital?.name,
+              hospitalRoutePoints: _hospitalRoadRoute,
+            ),
+          ),
+
+          // 2. Custom App Bar: "< Route View" (Matching reference left phone)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    // Back button / minimize
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 16,
+                              color: AppColors.textPrimary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              AppLocalizations.tr('routeView', locale),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+
+                    // 1-Tap Share Live Route
+                    GestureDetector(
+                      onTap: () => _shareTrackingDetails(booking),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.share_rounded, size: 14, color: Color(0xFF2563EB)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Share',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Live GPS / Status Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primaryRed,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            booking?.status.label.toUpperCase() ?? 'DISPATCHED',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryRed,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Stale Location Warning Banner (Section 5 requirement!)
+          if (bookingState.isGpsStale)
+            Positioned(
+              top: 100,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primaryRed.withValues(alpha: 0.4)),
+                  boxShadow: AppColors.softCardShadow,
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.wifi_tethering_off_rounded, color: AppColors.primaryRed, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Ambulance GPS signal is intermittent. Paramedic route remains active.',
+                        style: TextStyle(
+                          color: AppColors.primaryRedDark,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // 4. Floating Tracking Card at the bottom (Matches reference design!)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Destination Hospital Reached Handover Banner
+                  if (dynamicProgress >= 0.98 || isArrived || booking?.status == BookingStatus.tripCompleted) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.success,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.check_rounded, color: Colors.white, size: 18),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppLocalizations.tr('reachedHospital', locale),
+                                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF065F46)),
+                                    ),
+                                    Text(
+                                      booking?.destinationHospital?.name ?? 'Nearest Emergency Hospital',
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: AppColors.success),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 42,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                ref.read(bookingProvider.notifier).completeTrip();
+                                Navigator.of(context).pop();
+                              },
+                              icon: const Icon(Icons.home_rounded, color: Colors.white, size: 18),
+                              label: Text(
+                                AppLocalizations.tr('completeAndReturn', locale),
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Progress Track with moving ambulance icon synchronized to road progress
+                  RouteProgressBar(
+                    etaMinutes: dynamicEta,
+                    progress: dynamicProgress,
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: AppColors.borderLight, height: 16),
+
+                  // Driver Card
+                  DriverTrackingCard(
+                    driver: driver ??
+                        DriverModel(
+                          id: 'drv-108-pilot',
+                          name: 'Duty Ambulance Pilot',
+                          title: 'Emergency Medical Pilot',
+                          phone: '108',
+                          ambulanceNumber: 'TN-01-EM-108',
+                          ambulanceType: 'Advanced Life Support (ALS)',
+                          rating: 4.9,
+                          currentLat: userLat - 0.005,
+                          currentLng: userLng - 0.003,
+                          lastLocationUpdate: DateTime.now(),
+                        ),
+                    onCall: () => _callDriver(driver?.phone ?? '108'),
+                    onChat: () => _openChat(context, driver?.name ?? 'Ambulance Pilot'),
+                  ),
+
+                  // Expandable Drawer for Trip Details & Cancellation
+                  if (_isDetailsExpanded) ...[
+                    const Divider(color: AppColors.borderLight, height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Booking Reference', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        Text(
+                          booking?.referenceNumber ?? 'DISPATCH-ACTIVE',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Pickup Location', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        Text(
+                          booking?.pickupAddress ?? bookingState.currentAddress,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Destination Hospital', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            booking?.destinationHospital?.name ?? 'Nearest Emergency Hospital',
+                            textAlign: TextAlign.end,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: AppColors.primaryRed,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    _buildFirstAidCard(booking?.emergencyCategory ?? 'General Emergency'),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _shareTrackingDetails(booking),
+                            icon: const Icon(Icons.share_rounded, size: 16, color: Colors.white),
+                            label: const Text('Share Live Route', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showCancelDialog(context),
+                            icon: const Icon(Icons.cancel_outlined, color: AppColors.primaryRed, size: 16),
+                            label: const Text('Cancel Request', style: TextStyle(color: AppColors.primaryRed, fontWeight: FontWeight.bold, fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppColors.primaryRed),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // Toggle expandable drawer
+                  GestureDetector(
+                    onTap: () => setState(() => _isDetailsExpanded = !_isDetailsExpanded),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _isDetailsExpanded ? 'Hide Trip Details' : 'View Trip & Hospital Details',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Icon(
+                            _isDetailsExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: AppColors.textMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _callDriver(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Dialing $phone...')),
+        );
+      }
+    }
+  }
+
+  void _openChat(BuildContext context, String driverName) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DriverChatSheet(driverName: driverName),
+    );
+  }
+
+  void _showCancelDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Ambulance?'),
+        content: const Text(
+          'The ambulance is currently en route. Are you sure you wish to cancel this emergency dispatch?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Keep Booking'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(bookingProvider.notifier).cancelActiveBooking('Patient stabilized / alternate transport');
+              Navigator.of(context).pop();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryRed),
+            child: const Text('Cancel Booking'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _shareTrackingDetails(BookingModel? booking) async {
+    final refNum = booking?.referenceNumber ?? '#LR-108';
+    final hospital = booking?.destinationHospital?.name ?? 'Emergency Trauma Center';
+    final pickup = booking?.pickupAddress ?? 'Live GPS Location';
+    final shareText = '🚨 Emergency Dispatch Tracking 🚨\n'
+        'An emergency ambulance ($refNum) is en route to $pickup.\n'
+        'Destination Hospital: $hospital.\n'
+        'Track live progress: https://liferoute.app/track/$refNum';
+
+    final uri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(shareText)}');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        final smsUri = Uri.parse('sms:?body=${Uri.encodeComponent(shareText)}');
+        if (await canLaunchUrl(smsUri)) {
+          await launchUrl(smsUri);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Tracking link copied to clipboard! Share with family.'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Emergency tracking link ready for sharing.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildFirstAidCard(String category) {
+    IconData icon = Icons.medical_services_rounded;
+    Color color = AppColors.primaryRed;
+    String title = 'First-Aid While Ambulance is En Route';
+    List<String> steps = [];
+
+    final catLower = category.toLowerCase();
+    if (catLower.contains('cardiac') || catLower.contains('heart')) {
+      icon = Icons.favorite_rounded;
+      color = const Color(0xFFEF4444);
+      title = 'Cardiac First-Aid (CPR)';
+      steps = [
+        'Place patient flat on back on a firm, flat surface.',
+        'Push hard & fast in center of chest (100–120 compressions/min, 2 inches deep).',
+        'Do not stop CPR until the ambulance paramedics arrive with defibrillator.',
+      ];
+    } else if (catLower.contains('trauma') || catLower.contains('accident')) {
+      icon = Icons.warning_rounded;
+      color = const Color(0xFFF59E0B);
+      title = 'Accident / Trauma First-Aid';
+      steps = [
+        'Apply firm, continuous pressure with a clean cloth directly over bleeding wounds.',
+        'Keep patient completely still; do not move the neck or spine if vehicle crash.',
+        'Cover patient with a blanket to keep warm and prevent circulatory shock.',
+      ];
+    } else if (catLower.contains('breath') || catLower.contains('air')) {
+      icon = Icons.air_rounded;
+      color = const Color(0xFF3B82F6);
+      title = 'Breathing Distress Protocol';
+      steps = [
+        'Help patient sit upright (45–90 degrees) to expand lung capacity.',
+        'Loosen all tight collars, neckties, belts, and tight clothing.',
+        'Ensure open windows and maximum fresh airflow around the patient.',
+      ];
+    } else if (catLower.contains('stroke') || catLower.contains('neuro')) {
+      icon = Icons.psychology_rounded;
+      color = const Color(0xFF8B5CF6);
+      title = 'Stroke Emergency Protocol (FAST)';
+      steps = [
+        'Note the exact time symptoms first appeared (vital for clot-busting medication).',
+        'Place patient in the recovery position (on their side) if drowsy.',
+        'Do NOT give the patient anything to eat, drink, or medications like aspirin.',
+      ];
+    } else if (catLower.contains('maternity') || catLower.contains('pregnan')) {
+      icon = Icons.pregnant_woman_rounded;
+      color = const Color(0xFFEC4899);
+      title = 'Maternity / Labor Care';
+      steps = [
+        'Lay patient on her left side to maximize blood and oxygen flow to the baby.',
+        'Encourage slow, rhythmic breathing and reassure the mother.',
+        'Gather clean dry towels, blankets, and prenatal medical records for paramedics.',
+      ];
+    } else {
+      icon = Icons.medical_services_rounded;
+      color = const Color(0xFF10B981);
+      title = 'Emergency Protocol';
+      steps = [
+        'Check patient responsiveness and maintain an open airway.',
+        'Keep patient calm, lying down, and comfortable.',
+        'Assign a bystander to wait outside at the main gate/road to guide the ambulance.',
+      ];
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: color,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'LIFE SAVING',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...steps.map(
+            (s) => Padding(
+              padding: const EdgeInsets.only(bottom: 4.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('• ', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Expanded(
+                    child: Text(
+                      s,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
