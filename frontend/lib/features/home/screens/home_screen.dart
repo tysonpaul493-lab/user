@@ -31,6 +31,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final MapController _mapController = MapController();
   bool _isLocating = false;
 
+  void _safeMoveMap(LatLng target, double zoom) {
+    try {
+      _mapController.move(target, zoom);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +67,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref
             .read(hospitalProvider.notifier)
             .fetchNearbyHospitals(lat: loc.latitude, lng: loc.longitude);
-        _mapController.move(LatLng(loc.latitude, loc.longitude), 16.5);
+        _safeMoveMap(LatLng(loc.latitude, loc.longitude), 16.5);
         if (showToast) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -200,7 +206,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           previous.currentLat != next.currentLat ||
           previous.currentLng != next.currentLng) {
         if (selectedHospital == null) {
-          _mapController.move(LatLng(next.currentLat, next.currentLng), 16.5);
+          _safeMoveMap(LatLng(next.currentLat, next.currentLng), 16.5);
         }
         ref
             .read(hospitalProvider.notifier)
@@ -215,7 +221,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final h = next.selectedDestinationHospital!;
         final midLat = (userLat + h.lat) / 2;
         final midLng = (userLng + h.lng) / 2;
-        _mapController.move(LatLng(midLat, midLng), 14.3);
+        _safeMoveMap(LatLng(midLat, midLng), 14.3);
       }
     });
 

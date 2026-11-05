@@ -1,18 +1,19 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/storage_service.dart';
+import '../providers/auth_provider.dart';
 import '../../home/screens/home_screen.dart';
 import 'login_screen.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
@@ -38,10 +39,10 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animController.forward();
 
-    // After 2.0 seconds, smoothly transition to HomeScreen if user is already registered, or LoginScreen otherwise
-    Timer(const Duration(milliseconds: 2000), () async {
+    // After 1.5 seconds, smoothly transition to HomeScreen if user is already registered, or LoginScreen otherwise
+    Timer(const Duration(milliseconds: 1500), () {
       if (mounted) {
-        final storage = await StorageService.init();
+        final storage = ref.read(storageServiceProvider);
         final savedUser = storage.getUser();
         final bool isAlreadyRegistered = savedUser != null && savedUser.phone.isNotEmpty;
 

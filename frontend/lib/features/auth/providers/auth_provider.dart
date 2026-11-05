@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/constants/app_constants.dart';
@@ -94,6 +94,53 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (savedUser != null) {
       state = state.copyWith(user: savedUser);
     }
+  }
+
+  /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)
+  Future<bool> signInWithPhoneNumber(String phone) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final tenDigit = cleanPhone.length >= 10
+        ? cleanPhone.substring(cleanPhone.length - 10)
+        : cleanPhone;
+    final formattedPhone = '+91 $tenDigit';
+
+    final existing = _storageService.getRegisteredUserByPhone(tenDigit) ??
+        _storageService.getUser();
+    final name = (existing != null && existing.name.isNotEmpty)
+        ? existing.name
+        : 'Emergency User';
+
+    final user = UserModel(
+      id: existing?.id ?? 'usr-${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      phone: formattedPhone,
+      bloodGroup: existing?.bloodGroup,
+      emergencyNotes: existing?.emergencyNotes,
+    );
+
+    await _storageService.saveUser(user);
+    await _storageService.saveRegisteredUserByPhone(user);
+    await _storageService.saveLastRegisteredPhone(tenDigit);
+    await _storageService.saveToken('token_$tenDigit');
+
+    state = state.copyWith(
+      user: user,
+      currentPhone: formattedPhone,
+      isLoading: false,
+      isOtpSent: false,
+    );
+
+    // Sync with backend API
+    try {
+      await _apiClient.updateProfile({
+        'phone': formattedPhone,
+        'name': name,
+      });
+    } catch (_) {}
+
+    return true;
   }
 
   /// 1-Tap Sign In for already registered user without repeating registration

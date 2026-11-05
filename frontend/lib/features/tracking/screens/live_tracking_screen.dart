@@ -46,21 +46,28 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     final driverLat = driver?.currentLat ?? (userLat - 0.012);
     final driverLng = driver?.currentLng ?? (userLng - 0.008);
 
-    final currentKey = '$driverLat,$driverLng->$userLat,$userLng';
+    final isHeadingToHospital = booking?.status == BookingStatus.patientPickedUp ||
+        booking?.status == BookingStatus.travelingToHospital ||
+        booking?.status == BookingStatus.tripCompleted;
+    final hospital = booking?.destinationHospital;
+
+    final targetLat = (isHeadingToHospital && hospital != null) ? hospital.lat : userLat;
+    final targetLng = (isHeadingToHospital && hospital != null) ? hospital.lng : userLng;
+
+    final currentKey = '$driverLat,$driverLng->$targetLat,$targetLng';
     if (_lastRouteKey == currentKey && _ambulanceRoadRoute != null) return;
     _lastRouteKey = currentKey;
 
     try {
       final ambRoute = await RouteService.getRoadRoute(
         LatLng(driverLat, driverLng),
-        LatLng(userLat, userLng),
+        LatLng(targetLat, targetLng),
       );
 
       _initialFullAmbulanceRoute ??= List<LatLng>.from(ambRoute);
 
       List<LatLng>? hospRoute;
-      final hospital = booking?.destinationHospital;
-      if (hospital != null) {
+      if (hospital != null && !isHeadingToHospital) {
         hospRoute = await RouteService.getRoadRoute(
           LatLng(userLat, userLng),
           LatLng(hospital.lat, hospital.lng),
@@ -109,15 +116,43 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     final driverLng = driver?.currentLng ?? (userLng - 0.008);
 
     final driverPos = LatLng(driverLat, driverLng);
-    final isArrived = booking?.status == BookingStatus.driverArrived;
+    final isArrivedAtPickup = booking?.status == BookingStatus.driverArrived;
+    final isArrivedAtHospital = booking?.status == BookingStatus.tripCompleted;
 
-    final dynamicProgress = isArrived ? 1.0 : _calculateProgress(driverPos);
-    final dynamicEta = isArrived ? 0 : (booking?.etaMinutes ?? ((1.0 - dynamicProgress) * 5).ceil().clamp(0, 5));
+    final dynamicProgress = isArrivedAtHospital
+        ? 1.0
+        : (isArrivedAtPickup ? 0.5 : _calculateProgress(driverPos));
+    final dynamicEta = isArrivedAtHospital
+        ? 0
+        : (booking?.etaMinutes ?? ((1.0 - dynamicProgress) * 5).ceil().clamp(0, 5));
+
+    // Listen to trip finish: close live tracking screen so it never loops or repeats
+    ref.listen(bookingProvider, (prev, next) {
+      if (next.activeBooking == null && prev?.activeBooking != null) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      }
+    });
 
     // Refresh road routes if driver coordinates moved
     final currentKey = '$driverLat,$driverLng->$userLat,$userLng';
     if (_lastRouteKey != currentKey) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchRoadRoutes());
+    }
+
+    if (booking == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Route View'),
+        ),
+        body: const Center(
+          child: Text(
+            'Trip completed. Check History page for details.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
@@ -133,10 +168,10 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
               driverPosition: driverPos,
               driverHeading: driver?.heading ?? 45.0,
               routePoints: _ambulanceRoadRoute,
-              hospitalPosition: booking?.destinationHospital != null
-                  ? LatLng(booking!.destinationHospital!.lat, booking.destinationHospital!.lng)
+              hospitalPosition: booking.destinationHospital != null
+                  ? LatLng(booking.destinationHospital!.lat, booking.destinationHospital!.lng)
                   : null,
-              hospitalName: booking?.destinationHospital?.name,
+              hospitalName: booking.destinationHospital?.name,
               hospitalRoutePoints: _hospitalRoadRoute,
             ),
           ),
@@ -250,7 +285,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            booking?.status.label.toUpperCase() ?? 'DISPATCHED',
+                            booking.status.label.toUpperCase(),
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
@@ -322,8 +357,8 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Destination Hospital Reached Handover Banner
-                  if (dynamicProgress >= 0.98 || isArrived || booking?.status == BookingStatus.tripCompleted) ...[
+                  // Destination Hospital Reached Handover Banner (Only shows when hospital destination is reached)
+                  if (isArrivedAtHospital || booking.status == BookingStatus.tripCompleted) ...[
                     Container(
                       margin: const EdgeInsets.only(bottom: 14),
                       padding: const EdgeInsets.all(14),
@@ -354,7 +389,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF065F46)),
                                     ),
                                     Text(
-                                      booking?.destinationHospital?.name ?? 'Nearest Emergency Hospital',
+                                      booking.destinationHospital?.name ?? 'Nearest Emergency Hospital',
                                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: AppColors.success),
                                     ),
                                   ],
@@ -422,7 +457,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                       children: [
                         const Text('Booking Reference', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                         Text(
-                          booking?.referenceNumber ?? 'DISPATCH-ACTIVE',
+                          booking.referenceNumber,
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ],
@@ -433,7 +468,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                       children: [
                         const Text('Pickup Location', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                         Text(
-                          booking?.pickupAddress ?? bookingState.currentAddress,
+                          booking.pickupAddress,
                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                         ),
                       ],
@@ -446,7 +481,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            booking?.destinationHospital?.name ?? 'Nearest Emergency Hospital',
+                            booking.destinationHospital?.name ?? 'Nearest Emergency Hospital',
                             textAlign: TextAlign.end,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -459,7 +494,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                         ),
                       ],
                     ),
-                    _buildFirstAidCard(booking?.emergencyCategory ?? 'General Emergency'),
+                    _buildFirstAidCard(booking.emergencyCategory),
                     const SizedBox(height: 14),
                     Row(
                       children: [

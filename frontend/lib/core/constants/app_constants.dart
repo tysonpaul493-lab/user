@@ -1,3 +1,17 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+String get _detectedUserHost {
+  if (kIsWeb) return 'localhost';
+  try {
+    // 127.0.0.1 works with adb reverse for both physical devices and emulators
+    if (Platform.isAndroid) return '127.0.0.1';
+    return 'localhost';
+  } catch (_) {
+    return 'localhost';
+  }
+}
+
 class AppConstants {
   static const String appName = 'LifeRoute Emergency';
   static const String appVersion = '1.0.0';
@@ -9,8 +23,8 @@ class AppConstants {
 
   // Laravel Backend Defaults
   static const String defaultBaseUrl = 'https://api.liferoute-emergency.com/api';
-  static const String defaultLocalBaseUrl = 'http://10.0.2.2:8000/api';
-  static const String reverbHost = 'ws.liferoute-emergency.com';
+  static String get defaultLocalBaseUrl => 'http://$_detectedUserHost:8000/api';
+  static String get reverbHost => _detectedUserHost;
   static const int reverbPort = 8080;
   static const String reverbAppKey = 'liferoute_reverb_key';
 

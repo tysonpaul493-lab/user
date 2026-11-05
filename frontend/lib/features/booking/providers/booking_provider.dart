@@ -254,8 +254,11 @@ class BookingNotifier extends StateNotifier<BookingState> {
     );
   }
 
+  Timer? _activeBookingPoller;
+
   /// Complete trip when destination hospital is reached
   void completeTrip() {
+    _activeBookingPoller?.cancel();
     if (state.activeBooking != null) {
       final completed = state.activeBooking!.copyWith(
         status: BookingStatus.tripCompleted,
@@ -265,10 +268,43 @@ class BookingNotifier extends StateNotifier<BookingState> {
       state = state.copyWith(
         clearActiveBooking: true,
         bookingHistory: updatedHistory,
+        isSearching: false,
       );
       _storageService.saveBookingHistory(updatedHistory);
       _reverbService.disconnect();
     }
+  }
+
+  void _startActiveBookingPoller(String bookingId) {
+    _activeBookingPoller?.cancel();
+    _activeBookingPoller = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (state.activeBooking == null) {
+        _activeBookingPoller?.cancel();
+        return;
+      }
+
+      try {
+        final res = await _apiClient.getBooking(bookingId);
+        if (res['status'] == 'success' && res['booking'] != null) {
+          final serverBooking = BookingModel.fromJson(res['booking']);
+          _reverbService.updateCurrentBooking(serverBooking);
+
+          if (serverBooking.status == BookingStatus.tripCompleted) {
+            _activeBookingPoller?.cancel();
+            completeTrip();
+          } else if (serverBooking.driver != null && state.activeBooking?.driver == null) {
+            state = state.copyWith(
+              activeBooking: serverBooking,
+              isSearching: false,
+            );
+          } else if (serverBooking.driver != null) {
+            state = state.copyWith(
+              activeBooking: serverBooking,
+            );
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _listenToReverbEvents() {
@@ -319,6 +355,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
   /// Instant SOS 1-Tap Booking Dispatch
   Future<bool> triggerInstantSos({
     String? patientName,
+    String? callbackPhone,
     String? category,
     String? landmark,
     String? notes,
@@ -327,12 +364,24 @@ class BookingNotifier extends StateNotifier<BookingState> {
     state = state.copyWith(isCreatingBooking: true, isSearching: true, errorMessage: null);
 
     final user = _storageService.getUser();
+    final effectivePhone = (callbackPhone != null && callbackPhone.trim().isNotEmpty)
+        ? callbackPhone.trim()
+        : ((user?.phone != null && user!.phone.isNotEmpty)
+            ? user.phone
+            : '+91 84283 04510');
+    final effectiveName = (patientName != null && patientName.trim().isNotEmpty)
+        ? patientName.trim()
+        : ((user?.name != null && user!.name.isNotEmpty)
+            ? user.name
+            : 'Emergency Requester');
+
     final bookingData = {
       'pickup_lat': state.currentLat,
       'pickup_lng': state.currentLng,
       'pickup_address': state.currentFullAddress,
-      'callback_phone': user?.phone ?? '',
-      'patient_name': patientName ?? (user?.name.isNotEmpty == true ? user!.name : 'Emergency Patient'),
+      'callback_phone': effectivePhone,
+      'patient_phone': effectivePhone,
+      'patient_name': effectiveName,
       'emergency_category': category ?? 'General Emergency',
       'landmark': landmark ?? state.currentAddress,
       'notes': notes,
@@ -355,6 +404,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
           authToken: token,
           currentBooking: booking,
         );
+
+        // Start background polling sync with backend
+        _startActiveBookingPoller(booking.id);
         return true;
       } else {
         state = state.copyWith(
@@ -376,6 +428,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
 
   /// Cancel Active Emergency Booking
   Future<bool> cancelActiveBooking(String reason) async {
+    _activeBookingPoller?.cancel();
     if (state.activeBooking == null) return false;
     final bId = state.activeBooking!.id;
 
@@ -410,6 +463,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
 
   @override
   void dispose() {
+    _activeBookingPoller?.cancel();
     _bookingSub?.cancel();
     _driverLocationSub?.cancel();
     _positionStreamSub?.cancel();

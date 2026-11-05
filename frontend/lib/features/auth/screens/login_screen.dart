@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
-import '../../../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../../home/screens/home_screen.dart';
 
@@ -15,68 +15,71 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  // Mobile number starts completely empty - no prefill
   final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  final _otpFocusNode = FocusNode();
-  UserModel? _matchedRegisteredUser;
-  bool _showTopSmsNotification = false;
-  bool _showAutoFillChip = false;
-  Timer? _topSmsDismissTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _phoneController.addListener(_onPhoneChanged);
-    _otpFocusNode.addListener(() {
-      if (_otpFocusNode.hasFocus && _otpController.text.isEmpty) {
-        setState(() => _showAutoFillChip = true);
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final storage = ref.read(storageServiceProvider);
-      final lastPhone = storage.getLastRegisteredPhone();
-      if (lastPhone != null && lastPhone.isNotEmpty) {
-        final clean = lastPhone.replaceAll(RegExp(r'\D'), '');
-        final tenDigits = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
-        _phoneController.text = tenDigits;
-      }
-    });
-  }
-
-  void _onPhoneChanged() {
-    final phone = _phoneController.text.trim();
-    final clean = phone.replaceAll(RegExp(r'\D'), '');
-    if (clean.length >= 10) {
-      final user = ref.read(storageServiceProvider).getRegisteredUserByPhone(clean);
-      if (user != _matchedRegisteredUser) {
-        setState(() => _matchedRegisteredUser = user);
-      }
-    } else if (_matchedRegisteredUser != null) {
-      setState(() => _matchedRegisteredUser = null);
-    }
-  }
-
-  void _triggerTopSmsNotification() {
-    setState(() {
-      _showTopSmsNotification = true;
-      _showAutoFillChip = false;
-    });
-    _topSmsDismissTimer?.cancel();
-    _topSmsDismissTimer = Timer(const Duration(seconds: 10), () {
-      if (mounted) {
-        setState(() => _showTopSmsNotification = false);
-      }
-    });
-  }
+  String? _errorMessage;
 
   @override
   void dispose() {
-    _topSmsDismissTimer?.cancel();
-    _phoneController.removeListener(_onPhoneChanged);
     _phoneController.dispose();
-    _otpController.dispose();
-    _otpFocusNode.dispose();
     super.dispose();
+  }
+
+  void _handleSignIn() async {
+    final rawInput = _phoneController.text.trim();
+    final digits = rawInput.replaceAll(RegExp(r'\D'), '');
+
+    // Validate genuine Indian SIM mobile number (must be exactly 10 digits starting with 6, 7, 8, or 9)
+    if (digits.length != 10) {
+      setState(() {
+        _errorMessage = 'Please enter a valid 10-digit mobile number';
+      });
+      return;
+    }
+
+    final simNumberPattern = RegExp(r'^[6-9]\d{9}$');
+    if (!simNumberPattern.hasMatch(digits)) {
+      setState(() {
+        _errorMessage = 'Invalid SIM mobile number. Indian mobile numbers must start with 6, 7, 8, or 9.';
+      });
+      return;
+    }
+
+    setState(() => _errorMessage = null);
+
+    // Save user session with this verified SIM number and go straight to Home Screen
+    final success = await ref
+        .read(authProvider.notifier)
+        .signInWithPhoneNumber(digits);
+
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Connected with SIM mobile: +91 $digits',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+    }
   }
 
   @override
@@ -86,9 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          SafeArea(
+      body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
           child: Column(
@@ -112,13 +113,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
               // Emergency Brand Badge
               Center(
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 86,
+                  height: 86,
                   decoration: BoxDecoration(
                     gradient: AppColors.primaryGradient,
                     shape: BoxShape.circle,
@@ -127,7 +128,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: const Icon(
                     Icons.local_hospital_rounded,
                     color: Colors.white,
-                    size: 42,
+                    size: 46,
                   ),
                 ),
               ),
@@ -147,10 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const Text(
                 'Rapid Emergency Medical Response & Real-Time Tracking',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 36),
 
@@ -166,520 +164,248 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      authState.isOtpSent
-                          ? strings.get('verifyOtp')
-                          : strings.get('phoneLogin'),
-                      style: const TextStyle(
-                        fontSize: 18,
+                    const Text(
+                      'Emergency Mobile Access',
+                      style: TextStyle(
+                        fontSize: 19,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    if (!authState.isOtpSent) ...[
-                      // Phone Input
-                      Text(
-                        strings.get('enterPhone'),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                        ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter your genuine SIM mobile number to connect with 108 emergency dispatchers and ambulances in real time.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          prefixIcon: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.phone_rounded, color: AppColors.primaryRed, size: 18),
-                                SizedBox(width: 6),
-                                Text(
-                                  '+91',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                                ),
-                              ],
-                            ),
-                          ),
-                          hintText: 'Enter 10-digit mobile number',
-                        ),
-                      ),
+                    ),
+                    const SizedBox(height: 20),
 
-                      // If mobile number matches a registered user: Show instant 1-tap sign in banner
-                      if (_matchedRegisteredUser != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF0FDF4),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF16A34A).withValues(alpha: 0.08),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                    // Phone Input Field
+                    const Text(
+                      'Mobile Number (SIM Card)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                      onChanged: (_) {
+                        if (_errorMessage != null) {
+                          setState(() => _errorMessage = null);
+                        }
+                      },
+                      onSubmitted: (_) => _handleSignIn(),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        prefixIcon: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(5),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF16A34A),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.check_rounded, color: Colors.white, size: 13),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Registered User: ${_matchedRegisteredUser!.name}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF15803D),
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_matchedRegisteredUser!.bloodGroup != null && _matchedRegisteredUser!.bloodGroup!.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFDCFCE7),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'Blood: ${_matchedRegisteredUser!.bloodGroup}',
-                                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF166534)),
-                                      ),
-                                    ),
-                                ],
+                              Icon(
+                                Icons.phone_android_rounded,
+                                color: AppColors.primaryRed,
+                                size: 20,
                               ),
-                              const SizedBox(height: 10),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  await ref.read(authProvider.notifier).signInWithRegisteredUser(_matchedRegisteredUser!);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('👋 Welcome back, ${_matchedRegisteredUser!.name}!'),
-                                        backgroundColor: AppColors.success,
-                                      ),
-                                    );
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.flash_on_rounded, color: Colors.white, size: 18),
-                                label: Text(
-                                  'Sign In as ${_matchedRegisteredUser!.name}',
-                                  style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                '+91',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: AppColors.textPrimary,
                                 ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF16A34A),
-                                  padding: const EdgeInsets.symmetric(vertical: 11),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                '|',
+                                style: TextStyle(
+                                  color: AppColors.border,
+                                  fontSize: 18,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 16),
-
-                      // Send OTP Button
-                      Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.buttonGradient,
+                        hintText: 'Enter 10-digit SIM number',
+                        hintStyle: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 15,
+                          fontWeight: FontWeight.normal,
+                          letterSpacing: 0,
+                        ),
+                        errorText: _errorMessage,
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryRed.withValues(alpha: 0.35),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          borderSide: const BorderSide(color: AppColors.border),
                         ),
-                        child: ElevatedButton(
-                          onPressed: authState.isLoading
-                              ? null
-                              : () async {
-                                  final phone = _phoneController.text.trim();
-                                  if (phone.isEmpty || phone.replaceAll(RegExp(r'\D'), '').length < 10) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Please enter a valid 10-digit mobile number'),
-                                        backgroundColor: AppColors.primaryRed,
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
-                                  final success = await ref
-                                      .read(authProvider.notifier)
-                                      .sendOtp(phone, customOtp: code);
-
-                                  if (success && context.mounted) {
-                                    _triggerTopSmsNotification();
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: authState.isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : Text(
-                                  strings.get('sendOtp'),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ] else ...[
-                      const Text(
-                        'Enter 6-digit OTP code sent to your mobile',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _otpController,
-                        focusNode: _otpFocusNode,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        textAlign: TextAlign.center,
-                        onTap: () {
-                          if (_otpController.text.isEmpty) {
-                            setState(() => _showAutoFillChip = true);
-                          }
-                        },
-                        onChanged: (val) {
-                          if (val.isNotEmpty && _showAutoFillChip) {
-                            setState(() => _showAutoFillChip = false);
-                          }
-                        },
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
-                        ),
-                        decoration: const InputDecoration(
-                          counterText: '',
-                          hintText: '••••••',
-                        ),
-                      ),
-                      if (_showAutoFillChip && authState.lastGeneratedOtp != null && _otpController.text.isEmpty) ...[
-                        const SizedBox(height: 10),
-                        Center(
-                          child: Material(
-                            elevation: 3,
-                            borderRadius: BorderRadius.circular(20),
-                            color: const Color(0xFFEFF6FF),
-                            child: InkWell(
-                              onTap: () {
-                                _otpController.text = authState.lastGeneratedOtp!;
-                                setState(() => _showAutoFillChip = false);
-                              },
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.flash_on_rounded, color: Color(0xFF2563EB), size: 16),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '⚡ Auto-fill code from SMS: ${authState.lastGeneratedOtp}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF1E40AF),
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-
-                      // Verify Button
-                      Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.buttonGradient,
+                        focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: authState.isLoading
-                              ? null
-                              : () async {
-                                  final code = _otpController.text.trim();
-                                  if (code.length < 6) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Please enter the 6-digit verification code'),
-                                        backgroundColor: AppColors.primaryRed,
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  final success = await ref
-                                      .read(authProvider.notifier)
-                                      .verifyOtp(code);
-                                  if (success && context.mounted) {
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                                    );
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
+                          borderSide: const BorderSide(
+                            color: AppColors.primaryRed,
+                            width: 2,
                           ),
-                          child: authState.isLoading
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : Text(
-                                  strings.get('verifyOtp'),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                    ),
+                    const SizedBox(height: 24),
 
-                      // Resend Countdown
-                      Center(
-                        child: authState.resendCountdown > 0
-                            ? Text(
-                                '${strings.get('resendOtp')} ${authState.resendCountdown}${strings.get('seconds')}',
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 13,
+                    // Direct Enter Button
+                    Container(
+                      height: 54,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.buttonGradient,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryRed.withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: authState.isLoading ? null : _handleSignIn,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: authState.isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
                                 ),
                               )
-                            : TextButton(
-                                onPressed: () async {
-                                  final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
-                                  final res = await ref
-                                      .read(authProvider.notifier)
-                                      .sendOtp(_phoneController.text.trim(), customOtp: code);
-                                  if (res && mounted) {
-                                    _triggerTopSmsNotification();
-                                  }
-                                },
-                                child: const Text(
-                                  'Resend OTP Code',
-                                  style: TextStyle(
-                                    color: AppColors.primaryRed,
-                                    fontWeight: FontWeight.bold,
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Enter LifeRoute Emergency',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                ),
+                                  SizedBox(width: 8),
+                                  Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ],
                               ),
                       ),
-                    ],
-
-                    if (authState.errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        authState.errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.primaryRed,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Emergency Guest Bypass Button (Immediate Emergency)
-              OutlinedButton.icon(
-                onPressed: () {
-                  ref.read(authProvider.notifier).continueAsGuest();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  );
-                },
-                icon: const Icon(Icons.flash_on_rounded, color: AppColors.primaryRed),
-                label: Text(
-                  strings.get('skipForEmergency'),
-                  style: const TextStyle(
-                    color: AppColors.primaryRed,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
+              // Emergency Hotline 108 Card
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
                 ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: AppColors.primaryRed, width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryRed.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.phone_in_talk_rounded,
+                        color: AppColors.primaryRed,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Immediate Life Threatening Emergency?',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            'Toll-Free Government Hotline: 108 / 112',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryRed,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
       ),
-      // 10-Second Heads-up SMS Notification banner at the top of the screen
-      if (_showTopSmsNotification && authState.lastGeneratedOtp != null)
-        Positioned(
-          top: 10,
-          left: 14,
-          right: 14,
-          child: SafeArea(
-            child: Material(
-              elevation: 12,
-              borderRadius: BorderRadius.circular(20),
-              color: const Color(0xFF0F172A),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF2563EB),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.sms_rounded, color: Colors.white, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Row(
-                            children: [
-                              Text(
-                                'Messages',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                '• now',
-                                style: TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'LifeRoute Emergency: Your OTP verification code is ${authState.lastGeneratedOtp}. Valid for 10 min.',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12.5,
-                              height: 1.25,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 18),
-                      onPressed: () {
-                        _topSmsDismissTimer?.cancel();
-                        setState(() => _showTopSmsNotification = false);
-                      },
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-    ],
-  ),
-);
+    );
   }
 
-  Widget _langChip(String code, String label, String currentCode) {
-    final isSelected = currentCode == code;
+  Widget _langChip(String code, String label, String currentLocale) {
+    final isSelected = currentLocale == code;
     return GestureDetector(
       onTap: () => ref.read(authProvider.notifier).setLocale(code),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primaryRed : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : AppColors.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
           ),
         ),
       ),
     );
   }
-
 }

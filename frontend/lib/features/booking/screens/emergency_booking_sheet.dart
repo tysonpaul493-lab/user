@@ -118,6 +118,10 @@ class _EmergencyBookingSheetState extends ConsumerState<EmergencyBookingSheet> {
     // Automatically fill assistance notes based on the initial category
     _notesController.text = _categories.first.notes;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final u = ref.read(authProvider).user;
+      if (u != null && u.name.isNotEmpty && _patientNameController.text.isEmpty) {
+        _patientNameController.text = u.name;
+      }
       ref.read(hospitalProvider.notifier).setCategory(_selectedCategory);
     });
   }
@@ -728,6 +732,43 @@ class _EmergencyBookingSheetState extends ConsumerState<EmergencyBookingSheet> {
             ),
             const SizedBox(height: 14),
 
+            // Patient Name Input
+            Row(
+              children: [
+                const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.primaryRed,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'Patient / Requester Name',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _patientNameController,
+              decoration: InputDecoration(
+                hintText: 'Enter patient or caller name...',
+                prefixIcon: const Icon(
+                  Icons.badge_outlined,
+                  size: 20,
+                  color: AppColors.primaryRed,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // Paramedic Assistance Notes Header with Auto-fill Badge
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -815,7 +856,14 @@ class _EmergencyBookingSheetState extends ConsumerState<EmergencyBookingSheet> {
                 onPressed: () async {
                   Navigator.of(context).pop(); // close sheet
 
-                  // Open searching screen with the category-matched destination hospital
+                  final pName = _patientNameController.text.trim().isNotEmpty
+                      ? _patientNameController.text.trim()
+                      : (authState.user?.name.isNotEmpty == true ? authState.user!.name : 'Emergency Patient');
+                  final pPhone = (authState.user?.phone != null && authState.user!.phone.isNotEmpty)
+                      ? authState.user!.phone
+                      : '+91 84283 04510';
+
+                  // Open searching screen with the category-matched destination hospital and user details
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => SearchingAmbulanceScreen(
@@ -823,6 +871,8 @@ class _EmergencyBookingSheetState extends ConsumerState<EmergencyBookingSheet> {
                         landmark: 'GPS Pinpoint Location',
                         notes: _notesController.text,
                         destinationHospital: destHospital,
+                        patientName: pName,
+                        callbackPhone: pPhone,
                       ),
                     ),
                   );
