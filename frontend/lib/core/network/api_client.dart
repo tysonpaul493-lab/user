@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+
 import '../constants/app_constants.dart';
 import '../services/location_service.dart';
 import '../services/storage_service.dart';
@@ -8,9 +11,10 @@ import '../services/storage_service.dart';
 class ApiClient {
   late final Dio _dio;
   final StorageService _storageService;
-  String _baseUrl = AppConstants.defaultLocalBaseUrl;
+  final void Function()? onHostSwitched;
+  String _baseUrl = AppConstants.defaultBaseUrl;
 
-  ApiClient(this._storageService) {
+  ApiClient(this._storageService, {this.onHostSwitched}) {
     _dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
@@ -19,6 +23,7 @@ class ApiClient {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Connection': 'close',
         },
       ),
     );
@@ -34,11 +39,15 @@ class ApiClient {
           return handler.next(options);
         },
         onResponse: (response, handler) {
-          debugPrint('✅ [API Response ${response.statusCode}] ${response.requestOptions.uri}');
+          debugPrint(
+            '✅ [API Response ${response.statusCode}] ${response.requestOptions.uri}',
+          );
           return handler.next(response);
         },
         onError: (DioException error, handler) {
-          debugPrint('⚠️ [API Error] ${error.message} on ${error.requestOptions.uri}');
+          debugPrint(
+            '⚠️ [API Error] ${error.message} on ${error.requestOptions.uri}',
+          );
           return handler.next(error);
         },
       ),
@@ -50,33 +59,153 @@ class ApiClient {
     _dio.options.baseUrl = newUrl;
   }
 
+  /// Sync Dio base URL with current [AppConstants.defaultBaseUrl]
+  void refreshBaseUrl() {
+    updateBaseUrl(AppConstants.defaultBaseUrl);
+  }
+
+  /// Fast parallel probe of candidate hosts and lock onto the first healthy one instantly
+  static Future<String?> resolveReachableHost({
+    String? excludeHost,
+    Duration timeout = const Duration(milliseconds: 2500),
+  }) async {
+    if (kIsWeb ||
+        AppConstants.hasCustomServerHost ||
+        AppConstants.configuredApiUrl.isNotEmpty) {
+      return AppConstants.effectiveHost;
+    }
+
+    final candidates = AppConstants.candidateHosts
+        .where((h) => excludeHost == null || h != excludeHost)
+        .toList();
+
+    if (candidates.isEmpty) return null;
+
+    final completer = Completer<String?>();
+    var pending = candidates.length;
+
+    for (final host in candidates) {
+      final probe = Dio(
+        BaseOptions(
+          connectTimeout: timeout,
+          receiveTimeout: timeout,
+          sendTimeout: timeout,
+        ),
+      );
+
+      probe.get('${AppConstants.baseUrlForHost(host)}/health').then((resp) {
+        if (resp.statusCode == 200 && !completer.isCompleted) {
+          AppConstants.setRuntimeFallbackHost(host);
+          completer.complete(host);
+        }
+      }).catchError((_) {
+        // Probe failed on this host
+      }).whenComplete(() {
+        probe.close();
+        pending--;
+        if (pending == 0 && !completer.isCompleted) {
+          completer.complete(null);
+        }
+      });
+    }
+
+    return completer.future;
+  }
+
+  Future<Response<dynamic>> _executeWithFailover(
+    Future<Response<dynamic>> Function() requestFn,
+  ) async {
+    try {
+      return await requestFn();
+    } on DioException catch (e) {
+      final isConnectivityFailure =
+          e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.error is SocketException;
+
+      if (isConnectivityFailure &&
+          !kIsWeb &&
+          !AppConstants.hasCustomServerHost &&
+          AppConstants.configuredApiUrl.isEmpty) {
+        final failedHost = AppConstants.effectiveHost;
+        final nextHost = await resolveReachableHost(excludeHost: failedHost);
+        if (nextHost != null && nextHost != failedHost) {
+          refreshBaseUrl();
+          onHostSwitched?.call();
+          return await requestFn();
+        }
+      }
+      rethrow;
+    }
+  }
+
+  /// Ping dispatch server health endpoint to verify connectivity
+  Future<bool> checkHealth() async {
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.get(
+          '/health',
+          options: Options(
+            sendTimeout: const Duration(seconds: 4),
+            receiveTimeout: const Duration(seconds: 4),
+          ),
+        ),
+      );
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Dio get dio => _dio;
 
-  /// Send Phone OTP (Laravel Sanctum Auth)
+  /// Send Phone OTP via dispatch server first, with offline demo fallback
   Future<Map<String, dynamic>> sendOtp(String phone) async {
-    if (_storageService.isDemoMode()) {
-      await Future.delayed(const Duration(milliseconds: 700));
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.post('/auth/otp/send', data: {'phone': phone}),
+      );
+      if (response.data is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
       return {
         'status': 'success',
         'message': 'OTP sent successfully to $phone.',
-        'otp_expires_in': 60,
       };
-    }
-
-    try {
-      final response = await _dio.post('/auth/otp/send', data: {'phone': phone});
-      return response.data;
     } catch (e) {
+      if (_storageService.isDemoMode()) {
+        return {
+          'status': 'success',
+          'message': 'Verification code generated for $phone.',
+          'otp_expires_in': 60,
+          'sms_dispatched': false,
+        };
+      }
       return {'status': 'error', 'message': e.toString()};
     }
   }
 
-  /// Verify OTP and return user + Sanctum Token
+  /// Verify OTP and return user + auth token
   Future<Map<String, dynamic>> verifyOtp(String phone, String otp) async {
-    if (_storageService.isDemoMode()) {
-      await Future.delayed(const Duration(milliseconds: 700));
-      if (otp.length == 6) {
-        final mockToken = 'sanctum_token_${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.post('/auth/otp/verify', data: {'phone': phone, 'otp': otp}),
+      );
+      if (response.data['token'] != null) {
+        await _storageService.saveToken(response.data['token']);
+      }
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        final msg =
+            (e.response?.data is Map && e.response?.data['message'] != null)
+            ? e.response!.data['message'].toString()
+            : 'Invalid or expired verification code.';
+        return {'status': 'error', 'message': msg};
+      }
+      if (_storageService.isDemoMode() && otp.length == 6) {
+        final mockToken = 'token_${DateTime.now().millisecondsSinceEpoch}';
         await _storageService.saveToken(mockToken);
         final registered = _storageService.getRegisteredUserByPhone(phone);
         final existingUser = _storageService.getUser();
@@ -96,50 +225,64 @@ class ApiClient {
             'emergency_notes': userObj?.emergencyNotes ?? '',
           },
         };
-      } else {
-        return {'status': 'error', 'message': 'Invalid verification code.'};
       }
-    }
-
-    try {
-      final response = await _dio.post('/auth/otp/verify', data: {
-        'phone': phone,
-        'otp': otp,
-      });
-      if (response.data['token'] != null) {
-        await _storageService.saveToken(response.data['token']);
-      }
-      return response.data;
+      return {'status': 'error', 'message': e.toString()};
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
     }
   }
 
   /// Create Emergency Ambulance Booking
-  Future<Map<String, dynamic>> createBooking(Map<String, dynamic> bookingData) async {
+  Future<Map<String, dynamic>> createBooking(
+    Map<String, dynamic> bookingData,
+  ) async {
     try {
-      final response = await _dio.post('/bookings', data: bookingData);
+      final response = await _executeWithFailover(
+        () => _dio.post('/bookings', data: bookingData),
+      );
       return response.data;
     } catch (e) {
       debugPrint('⚠️ [API Client] Real /bookings call error or offline: $e');
       if (_storageService.isDemoMode()) {
-        final bookingId = 'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
+        final bookingId =
+            'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
+        final pLat =
+            (bookingData['pickup_lat'] as num?)?.toDouble() ??
+            AppConstants.defaultLat;
+        final pLng =
+            (bookingData['pickup_lng'] as num?)?.toDouble() ??
+            AppConstants.defaultLng;
+        final destMap =
+            bookingData['destination_hospital'] as Map<String, dynamic>?;
+        final dLat = (destMap?['lat'] as num?)?.toDouble() ?? pLat;
+        final dLng = (destMap?['lng'] as num?)?.toDouble() ?? pLng;
+        final distKm = (dLat != pLat || dLng != pLng)
+            ? LocationService.calculateDrivingDistanceKm(pLat, pLng, dLat, dLng)
+            : 0.0;
+        final etaMin = distKm <= 0.05
+            ? 0
+            : (distKm / 35.0 * 60.0).ceil().clamp(1, 120);
         return {
           'status': 'success',
           'booking': {
             'id': bookingId,
-            'reference_number': '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
+            'reference_number':
+                '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
             'status': 'finding_ambulance',
-            'pickup_lat': bookingData['pickup_lat'] ?? AppConstants.defaultLat,
-            'pickup_lng': bookingData['pickup_lng'] ?? AppConstants.defaultLng,
-            'pickup_address': bookingData['pickup_address'] ?? AppConstants.defaultLocationName,
+            'pickup_lat': pLat,
+            'pickup_lng': pLng,
+            'pickup_address':
+                bookingData['pickup_address'] ??
+                AppConstants.defaultLocationName,
             'callback_phone': bookingData['callback_phone'] ?? '',
             'patient_name': bookingData['patient_name'],
-            'emergency_category': bookingData['emergency_category'] ?? 'General Emergency',
+            'emergency_category':
+                bookingData['emergency_category'] ?? 'General Emergency',
             'landmark': bookingData['landmark'],
             'notes': bookingData['notes'],
-            'destination_hospital': bookingData['destination_hospital'],
-            'eta_minutes': 5,
+            'destination_hospital': destMap,
+            'distance_km': distKm,
+            'eta_minutes': etaMin,
             'created_at': DateTime.now().toIso8601String(),
           },
         };
@@ -151,7 +294,9 @@ class ApiClient {
   /// Get Booking Status by ID from backend
   Future<Map<String, dynamic>> getBooking(String bookingId) async {
     try {
-      final response = await _dio.get('/bookings/$bookingId');
+      final response = await _executeWithFailover(
+        () => _dio.get('/bookings/$bookingId'),
+      );
       return response.data;
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
@@ -159,9 +304,15 @@ class ApiClient {
   }
 
   /// Cancel Booking
-  Future<Map<String, dynamic>> cancelBooking(String bookingId, String reason) async {
+  Future<Map<String, dynamic>> cancelBooking(
+    String bookingId,
+    String reason,
+  ) async {
     try {
-      final response = await _dio.post('/bookings/$bookingId/cancel', data: {'reason': reason});
+      final response = await _executeWithFailover(
+        () =>
+            _dio.post('/bookings/$bookingId/cancel', data: {'reason': reason}),
+      );
       return response.data;
     } catch (e) {
       if (_storageService.isDemoMode()) {
@@ -180,15 +331,43 @@ class ApiClient {
       return {'status': 'success', 'user': data};
     }
     try {
-      final response = await _dio.put('/user/profile', data: data);
+      final response = await _executeWithFailover(
+        () => _dio.put('/user/profile', data: data),
+      );
       return response.data;
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
     }
   }
 
+  /// Relay trip chat message to backend and active ambulance driver
+  Future<Map<String, dynamic>> sendChatMessage(
+    String bookingId,
+    String message, {
+    String sender = 'user',
+  }) async {
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.post(
+          '/bookings/$bookingId/chat',
+          data: {'message': message, 'sender': sender},
+        ),
+      );
+      if (response.data is Map<String, dynamic>) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      return {'status': 'success'};
+    } catch (e) {
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
   /// Fetch Nearby Hospitals based strictly on user's surrounding location and emergency category
-  Future<List<Map<String, dynamic>>> getNearbyHospitals(double lat, double lng, {String? category}) async {
+  Future<List<Map<String, dynamic>>> getNearbyHospitals(
+    double lat,
+    double lng, {
+    String? category,
+  }) async {
     final osmHospitals = <Map<String, dynamic>>[];
 
     try {
@@ -197,18 +376,23 @@ class ApiClient {
       final maxLng = lng + 0.15;
       final minLat = lat - 0.12;
       final maxLat = lat + 0.12;
-      final url = 'https://nominatim.openstreetmap.org/search?format=json&q=hospital&viewbox=$minLng,$maxLat,$maxLng,$minLat&bounded=1&limit=25';
+      final url =
+          'https://nominatim.openstreetmap.org/search?format=json&q=hospital&viewbox=$minLng,$maxLat,$maxLng,$minLat&bounded=1&limit=25';
 
       final response = await _dio.get(
         url,
         options: Options(
-          headers: {'User-Agent': 'LifeRouteEmergencyApp/1.0 (contact@liferoute.com)'},
+          headers: {
+            'User-Agent': 'LifeRouteEmergencyApp/1.0 (contact@liferoute.com)',
+          },
           sendTimeout: const Duration(seconds: 4),
           receiveTimeout: const Duration(seconds: 5),
         ),
       );
 
-      if (response.statusCode == 200 && response.data is List && (response.data as List).isNotEmpty) {
+      if (response.statusCode == 200 &&
+          response.data is List &&
+          (response.data as List).isNotEmpty) {
         final list = response.data as List;
 
         for (int i = 0; i < list.length; i++) {
@@ -217,14 +401,23 @@ class ApiClient {
           final hLng = double.tryParse(item['lon']?.toString() ?? '') ?? 0.0;
           if (hLat == 0.0 || hLng == 0.0) continue;
 
-          final distKm = LocationService.calculateDrivingDistanceKm(lat, lng, hLat, hLng);
+          final distKm = LocationService.calculateDrivingDistanceKm(
+            lat,
+            lng,
+            hLat,
+            hLng,
+          );
           // Strictly only include hospitals in user's surrounding area (<= 25 km driving route)
           if (distKm > 25.0) continue;
 
           final driveTimeMin = (distKm * 2.4).ceil().clamp(2, 60);
-          final rawName = item['name'] ?? item['display_name']?.toString().split(',').first ?? 'Emergency Hospital';
+          final rawName =
+              item['name'] ??
+              item['display_name']?.toString().split(',').first ??
+              'Emergency Hospital';
           final displayName = item['display_name']?.toString() ?? rawName;
-          final isGov = rawName.toLowerCase().contains('government') ||
+          final isGov =
+              rawName.toLowerCase().contains('government') ||
               rawName.toLowerCase().contains('general') ||
               rawName.toLowerCase().contains('district') ||
               rawName.toLowerCase().contains('civil') ||
@@ -244,7 +437,7 @@ class ApiClient {
               isGov ? 'Free 108 Emergency' : 'Accident Trauma Center',
               'Level 1 Trauma Care',
               'Emergency ICU Available',
-              'Resuscitation & Casualty Unit'
+              'Resuscitation & Casualty Unit',
             ],
             'has_trauma_center': true,
             'has_icu_bed': true,
@@ -264,7 +457,9 @@ class ApiClient {
     for (final item in osmHospitals) {
       final itemName = item['name']?.toString().toLowerCase() ?? '';
       final firstWord = itemName.split(' ').first;
-      if (!merged.any((m) => m['name'].toString().toLowerCase().contains(firstWord))) {
+      if (!merged.any(
+        (m) => m['name'].toString().toLowerCase().contains(firstWord),
+      )) {
         merged.add(item);
       }
     }
@@ -285,7 +480,12 @@ class ApiClient {
     bool hasTraumaCenter = true,
     bool hasIcuBed = true,
   }) {
-    final distKm = LocationService.calculateDrivingDistanceKm(userLat, userLng, lat, lng);
+    final distKm = LocationService.calculateDrivingDistanceKm(
+      userLat,
+      userLng,
+      lat,
+      lng,
+    );
     final driveTimeMin = (distKm * 2.4).ceil().clamp(2, 60);
     return {
       'id': id,
@@ -303,7 +503,11 @@ class ApiClient {
   }
 
   /// Generate verified emergency hospitals genuinely surrounding user's live coordinates (<= 20 km)
-  List<Map<String, dynamic>> _generateSurroundingHospitals(double lat, double lng, {String? category}) {
+  List<Map<String, dynamic>> _generateSurroundingHospitals(
+    double lat,
+    double lng, {
+    String? category,
+  }) {
     final allVerified = <Map<String, dynamic>>[
       // Coimbatore Premier Centers
       _buildHospitalEntry(
@@ -451,7 +655,8 @@ class ApiClient {
       _buildHospitalEntry(
         id: 'kmch-hospital-main',
         name: 'Kovai Medical Center and Hospital (KMCH Level 1 Trauma)',
-        address: '99, Avinashi Road, Civil Aerodrome Post, Peelamedu, Coimbatore',
+        address:
+            '99, Avinashi Road, Civil Aerodrome Post, Peelamedu, Coimbatore',
         lat: 11.0425,
         lng: 77.0370,
         userLat: lat,
@@ -541,7 +746,13 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '108',
-        emergencyServices: ['Free 108 Emergency', 'Zero-Delay Trauma Care', 'Burn Unit', 'Blood Bank', '24x7 Casualty'],
+        emergencyServices: [
+          'Free 108 Emergency',
+          'Zero-Delay Trauma Care',
+          'Burn Unit',
+          'Blood Bank',
+          '24x7 Casualty',
+        ],
       ),
       _buildHospitalEntry(
         id: 'h-chennai-gov-2',
@@ -552,7 +763,12 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '108',
-        emergencyServices: ['Free 108 Emergency', 'Accident Trauma ICU', 'Microvascular Unit', '24x7 Stroke Care'],
+        emergencyServices: [
+          'Free 108 Emergency',
+          'Accident Trauma ICU',
+          'Microvascular Unit',
+          '24x7 Stroke Care',
+        ],
       ),
       _buildHospitalEntry(
         id: 'h-chennai-gov-3',
@@ -563,7 +779,13 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '108',
-        emergencyServices: ['Free 108 Emergency', '24x7 Casualty', 'Accident Care', 'Poisoning Care', 'Emergency ICU'],
+        emergencyServices: [
+          'Free 108 Emergency',
+          '24x7 Casualty',
+          'Accident Care',
+          'Poisoning Care',
+          'Emergency ICU',
+        ],
       ),
       _buildHospitalEntry(
         id: 'h-chennai-apollo',
@@ -574,7 +796,12 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '1066',
-        emergencyServices: ['Level 1 Trauma', '24x7 Cath Lab', 'Resuscitation Unit', 'Cardiac ICU'],
+        emergencyServices: [
+          'Level 1 Trauma',
+          '24x7 Cath Lab',
+          'Resuscitation Unit',
+          'Cardiac ICU',
+        ],
       ),
 
       // Bengaluru Premier Centers
@@ -587,7 +814,12 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '108',
-        emergencyServices: ['Free 108 Emergency', 'Level 1 Trauma Care', 'State Burn ICU', 'Emergency Resuscitation'],
+        emergencyServices: [
+          'Free 108 Emergency',
+          'Level 1 Trauma Care',
+          'State Burn ICU',
+          'Emergency Resuscitation',
+        ],
       ),
       _buildHospitalEntry(
         id: 'h-blr-manipal',
@@ -598,7 +830,12 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '+91 80 2502 4444',
-        emergencyServices: ['Level 1 Trauma Care', 'Cath Lab', 'Cardiac ICU (CCU)', 'Comprehensive Stroke Center'],
+        emergencyServices: [
+          'Level 1 Trauma Care',
+          'Cath Lab',
+          'Cardiac ICU (CCU)',
+          'Comprehensive Stroke Center',
+        ],
       ),
 
       // Madurai Premier Centers
@@ -611,12 +848,19 @@ class ApiClient {
         userLat: lat,
         userLng: lng,
         emergencyPhone: '108',
-        emergencyServices: ['Free 108 Emergency', 'Level 1 Trauma Care', 'Emergency ICU', 'Cardiac Resuscitation'],
+        emergencyServices: [
+          'Free 108 Emergency',
+          'Level 1 Trauma Care',
+          'Emergency ICU',
+          'Cardiac Resuscitation',
+        ],
       ),
     ];
 
     // Filter STRICTLY by surrounding distance (<= 25 km from user coordinates)
-    var filtered = allVerified.where((h) => (h['distance_km'] as num) <= 25.0).toList();
+    var filtered = allVerified
+        .where((h) => (h['distance_km'] as num) <= 25.0)
+        .toList();
 
     // If user's live coordinates are in a new region/city or emulator without pre-seeded centers:
     // Generate genuine local emergency facilities situated right in the user's surrounding area (1.2 km - 5.0 km)
@@ -636,7 +880,7 @@ class ApiClient {
             'Level 1 Trauma Care',
             '24x7 Casualty',
             'Emergency ICU',
-            'Resuscitation Unit'
+            'Resuscitation Unit',
           ],
         ),
         _buildHospitalEntry(
@@ -652,7 +896,7 @@ class ApiClient {
             '24x7 Emergency',
             'Level 1 Trauma Care',
             'Cath Lab & Cardiac ICU',
-            'Stroke Unit'
+            'Stroke Unit',
           ],
         ),
         _buildHospitalEntry(
@@ -668,7 +912,7 @@ class ApiClient {
             'Level 2 Trauma Care',
             'Emergency ICU Beds',
             'Cardiac Care',
-            '24x7 Casualty'
+            '24x7 Casualty',
           ],
         ),
         _buildHospitalEntry(
@@ -684,7 +928,7 @@ class ApiClient {
             '24x7 Casualty',
             'Emergency Maternity & Neonatal ICU',
             'Pediatric Emergency',
-            'First Aid'
+            'First Aid',
           ],
         ),
       ];
@@ -694,7 +938,10 @@ class ApiClient {
   }
 
   /// Filter hospitals by medical category while always keeping Government hospital #1
-  List<Map<String, dynamic>> _filterAndSortHospitals(List<Map<String, dynamic>> list, String? category) {
+  List<Map<String, dynamic>> _filterAndSortHospitals(
+    List<Map<String, dynamic>> list,
+    String? category,
+  ) {
     if (category == null || category.isEmpty || category == 'All') {
       list.sort((a, b) {
         final aGov = _isGovernment(a['name']?.toString() ?? '');
@@ -712,13 +959,19 @@ class ApiClient {
       // Government hospitals have all emergency departments
       if (_isGovernment(name)) return true;
 
-      final services = (h['emergency_services'] as List<dynamic>?)
+      final services =
+          (h['emergency_services'] as List<dynamic>?)
               ?.map((e) => e.toString().toLowerCase())
               .toList() ??
           [];
 
       if (catLower.contains('cardiac') || catLower.contains('heart')) {
-        return services.any((s) => s.contains('cardiac') || s.contains('cath lab') || s.contains('ccu')) ||
+        return services.any(
+              (s) =>
+                  s.contains('cardiac') ||
+                  s.contains('cath lab') ||
+                  s.contains('ccu'),
+            ) ||
             name.contains('cardiac') ||
             name.contains('gknm') ||
             name.contains('ramakrishna') ||
@@ -727,46 +980,88 @@ class ApiClient {
             name.contains('kg');
       } else if (catLower.contains('trauma') || catLower.contains('accident')) {
         return h['has_trauma_center'] == true ||
-            services.any((s) => s.contains('trauma') || s.contains('casualty') || s.contains('ortho')) ||
+            services.any(
+              (s) =>
+                  s.contains('trauma') ||
+                  s.contains('casualty') ||
+                  s.contains('ortho'),
+            ) ||
             name.contains('trauma') ||
             name.contains('ganga') ||
             name.contains('kmch') ||
             name.contains('ashwin') ||
             name.contains('richmond');
       } else if (catLower.contains('breath') || catLower.contains('air')) {
-        return services.any((s) => s.contains('pulmonary') || s.contains('icu') || s.contains('ventilator')) ||
+        return services.any(
+              (s) =>
+                  s.contains('pulmonary') ||
+                  s.contains('icu') ||
+                  s.contains('ventilator'),
+            ) ||
             name.contains('psg') ||
             name.contains('kmch') ||
             name.contains('ramakrishna');
-      } else if (catLower.contains('maternity') || catLower.contains('pregnan')) {
-        return services.any((s) => s.contains('maternity') || s.contains('delivery') || s.contains('neonatal')) ||
+      } else if (catLower.contains('maternity') ||
+          catLower.contains('pregnan')) {
+        return services.any(
+              (s) =>
+                  s.contains('maternity') ||
+                  s.contains('delivery') ||
+                  s.contains('neonatal'),
+            ) ||
             name.contains('gknm') ||
             name.contains('psg') ||
             name.contains('masonic') ||
             name.contains('esi');
       } else if (catLower.contains('stroke') || catLower.contains('neuro')) {
-        return services.any((s) => s.contains('stroke') || s.contains('thrombolysis') || s.contains('neuro')) ||
+        return services.any(
+              (s) =>
+                  s.contains('stroke') ||
+                  s.contains('thrombolysis') ||
+                  s.contains('neuro'),
+            ) ||
             name.contains('stroke') ||
             name.contains('kg') ||
             name.contains('kmch') ||
             name.contains('royal care') ||
             name.contains('ramakrishna');
       } else if (catLower.contains('pediatric') || catLower.contains('child')) {
-        return services.any((s) => s.contains('pediatric') || s.contains('picu') || s.contains('nicu') || s.contains('neonatal')) ||
+        return services.any(
+              (s) =>
+                  s.contains('pediatric') ||
+                  s.contains('picu') ||
+                  s.contains('nicu') ||
+                  s.contains('neonatal'),
+            ) ||
             name.contains('ramakrishna') ||
             name.contains('masonic') ||
             name.contains('psg') ||
             name.contains('gknm');
       } else if (catLower.contains('burn')) {
-        return services.any((s) => s.contains('burn') || s.contains('plastic')) ||
+        return services.any(
+              (s) => s.contains('burn') || s.contains('plastic'),
+            ) ||
             name.contains('ganga') ||
             name.contains('cmch');
       } else if (catLower.contains('poison') || catLower.contains('snake')) {
-        return services.any((s) => s.contains('poison') || s.contains('toxicology') || s.contains('antivenom')) ||
+        return services.any(
+              (s) =>
+                  s.contains('poison') ||
+                  s.contains('toxicology') ||
+                  s.contains('antivenom'),
+            ) ||
             name.contains('cmch') ||
             name.contains('kg');
-      } else if (catLower.contains('senior') || catLower.contains('geriatric') || catLower.contains('elder')) {
-        return services.any((s) => s.contains('icu') || s.contains('cardiac') || s.contains('emergency') || s.contains('dialysis')) ||
+      } else if (catLower.contains('senior') ||
+          catLower.contains('geriatric') ||
+          catLower.contains('elder')) {
+        return services.any(
+              (s) =>
+                  s.contains('icu') ||
+                  s.contains('cardiac') ||
+                  s.contains('emergency') ||
+                  s.contains('dialysis'),
+            ) ||
             name.contains('cmch') ||
             name.contains('kg') ||
             name.contains('ramakrishna') ||

@@ -16,7 +16,11 @@ class BookingHistoryScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final locale = authState.selectedLocale;
 
-    final displayHistory = bookingState.bookingHistory;
+    final seen = <String>{};
+    final displayHistory = bookingState.bookingHistory.where((b) {
+      final key = b.id.isNotEmpty ? b.id : b.referenceNumber;
+      return key.isEmpty || seen.add(key);
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -332,24 +336,47 @@ class BookingHistoryScreen extends ConsumerWidget {
 
               // Date & Time Card
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderLight),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primaryRed),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primaryRed),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Dispatch Date & Intake Time', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                              Text(dateStr, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (item.acceptedAt != null || item.completedAt != null) ...[
+                      const Divider(height: 16, color: AppColors.borderLight),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Dispatch Date & Time', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                          Text(dateStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          if (item.acceptedAt != null)
+                            Text(
+                              'Dispatched: ${DateFormat('hh:mm:ss a').format(item.acceptedAt!)}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                            ),
+                          if (item.completedAt != null)
+                            Text(
+                              'Completed: ${DateFormat('hh:mm:ss a').format(item.completedAt!)}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w700),
+                            ),
                         ],
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

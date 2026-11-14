@@ -5,7 +5,7 @@ This repository is organized into dedicated **Frontend** and **Backend** directo
 ```
 liferoute emergency user/
 ├── frontend/    # Cross-platform Flutter mobile application
-└── backend/     # Express.js REST API & WebSocket server
+└── backend/     # Laravel 12 (PHP 8.2) REST API, Ratchet WebSocket Server & MySQL persistence
 ```
 
 ---
@@ -22,12 +22,13 @@ flutter run
 
 ---
 
-## 🚑 Backend (REST API & WebSockets)
+## 🚑 Backend (Laravel PHP + MySQL + WebSockets)
 
-Built with Node.js, Express, and WebSocket server for live emergency dispatch and driver coordinates.
+Built with Laravel 12 (PHP 8.2), MySQL (`liferoute`), and Ratchet RFC6455 WebSockets (`php artisan websocket:serve`) for live emergency dispatch and driver coordinates.
 
 ```bash
 cd backend
-npm install
-npm start
+php artisan migrate --seed
+php artisan websocket:serve --host=0.0.0.0 --port=8080
+php artisan serve --host=0.0.0.0 --port=8000
 ```

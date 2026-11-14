@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/route_service.dart';
 import '../../../models/booking_model.dart';
 import '../../../shared/widgets/custom_map_widget.dart';
 import '../../../shared/widgets/header_location_pill.dart';
@@ -27,7 +28,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   final MapController _mapController = MapController();
   bool _isLocating = false;
 
@@ -40,6 +41,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Automatically track user's real live GPS on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _trackLiveLocation(showToast: false);
@@ -48,7 +50,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(bookingProvider.notifier).reconnectLiveSync();
+      _trackLiveLocation(showToast: false);
+    }
   }
 
   /// Request GPS permission, get high-accuracy coordinates, reverse geocode, and center the map
@@ -68,33 +79,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .read(hospitalProvider.notifier)
             .fetchNearbyHospitals(lat: loc.latitude, lng: loc.longitude);
         _safeMoveMap(LatLng(loc.latitude, loc.longitude), 16.5);
-        if (showToast) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(
-                    Icons.my_location_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Live Location: ${loc.address}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
       } else {
         if (showToast) {
           _showLocationPermissionDialog(
@@ -207,6 +191,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           previous.currentLng != next.currentLng) {
         if (selectedHospital == null) {
           _safeMoveMap(LatLng(next.currentLat, next.currentLng), 16.5);
+        } else {
+          ref
+              .read(hospitalProvider.notifier)
+              .refreshRoadRoute(LatLng(next.currentLat, next.currentLng));
         }
         ref
             .read(hospitalProvider.notifier)
@@ -767,6 +755,108 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                 ),
+                // PENDING DISPATCH SEARCH BANNER
+                if (bookingState.isSearching ||
+                    (activeBooking != null &&
+                        activeBooking.status == BookingStatus.findingAmbulance))
+                  Positioned(
+                    top: 14,
+                    left: 16,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.2,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '🚨 AMBULANCE DISPATCH PENDING',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Broadcasting emergency call to nearby 108 units...',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (activeBooking != null) {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const LiveTrackingScreen(),
+                                  ),
+                                );
+                              } else {
+                                _handleSosTap(context);
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppColors.primaryRed,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              minimumSize: const Size(60, 32),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: const Text(
+                              'VIEW',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -895,7 +985,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      '${activeBooking.driver?.name ?? AppLocalizations.tr('dutyPilot', locale)} • ${activeBooking.driver?.ambulanceNumber ?? "108 ALS"}',
+                                      activeBooking.driver != null
+                                          ? (activeBooking.driver!.name.trim().isNotEmpty
+                                              ? '${activeBooking.driver!.name} • ${activeBooking.driver!.ambulanceNumber}'
+                                              : (activeBooking.driver!.ambulanceNumber.isNotEmpty
+                                                  ? activeBooking.driver!.ambulanceNumber
+                                                  : activeBooking.driver!.phone))
+                                          : activeBooking.referenceNumber,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -905,13 +1001,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 1),
-                                    Text(
-                                      '${AppLocalizations.tr('arrivingIn', locale)} ${activeBooking.etaMinutes} ${AppLocalizations.tr('minTapForRoute', locale)}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF38BDF8),
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                    Builder(
+                                      builder: (_) {
+                                        final drv = activeBooking.driver;
+                                        final isToHosp = activeBooking.status == BookingStatus.patientPickedUp ||
+                                            activeBooking.status == BookingStatus.travelingToHospital ||
+                                            activeBooking.status == BookingStatus.arrivedAtHospital;
+                                        final hosp = activeBooking.destinationHospital;
+                                        final tLat = (isToHosp && hosp != null) ? hosp.lat : activeBooking.pickupLat;
+                                        final tLng = (isToHosp && hosp != null) ? hosp.lng : activeBooking.pickupLng;
+                                        final liveKm = (drv != null &&
+                                                RouteService.isValidCoordinate(
+                                                  LatLng(drv.currentLat, drv.currentLng),
+                                                ))
+                                            ? LocationService.calculateDrivingDistanceKm(
+                                                drv.currentLat,
+                                                drv.currentLng,
+                                                tLat,
+                                                tLng,
+                                              )
+                                            : activeBooking.distanceKm;
+                                        final liveMin = liveKm <= 0.05
+                                            ? 0
+                                            : (liveKm / 35.0 * 60.0).ceil().clamp(1, 120);
+                                        final distStr = liveKm < 1.0
+                                            ? '${(liveKm * 1000).round()} m'
+                                            : '${liveKm.toStringAsFixed(1)} km';
+                                        final statusTxt = liveMin <= 0
+                                            ? 'Arrived • Tap for route'
+                                            : '$distStr • $liveMin min • Tap for route';
+                                        return Text(
+                                          statusTxt,
+                                          style: const TextStyle(
+                                            color: Color(0xFF38BDF8),
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),

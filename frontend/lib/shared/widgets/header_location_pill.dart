@@ -19,9 +19,14 @@ class HeaderLocationPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = userName.trim().isNotEmpty ? userName.trim() : 'Emergency User';
-    final displayPhone = userPhone.trim().isNotEmpty ? userPhone.trim() : 'Tap to add mobile';
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+    final trimmedName = userName.trim();
+    final trimmedPhone = userPhone.trim();
+    final displayName = trimmedName.isNotEmpty
+        ? trimmedName
+        : (trimmedPhone.isNotEmpty ? trimmedPhone : 'Tap to set name');
+    final displayPhone = trimmedPhone.isNotEmpty ? trimmedPhone : 'Tap to add mobile';
+    final initialSource = trimmedName.isNotEmpty ? trimmedName : displayName;
+    final initial = initialSource.isNotEmpty ? initialSource[0].toUpperCase() : 'U';
     final displayAddress = (liveLocationAddress != null && liveLocationAddress!.trim().isNotEmpty)
         ? liveLocationAddress!.trim()
         : 'Resolving Live GPS Address...';

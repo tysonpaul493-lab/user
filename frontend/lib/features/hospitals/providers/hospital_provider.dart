@@ -279,6 +279,32 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
     }
   }
 
+  Future<void> _fetchAndApplyRoadRoute(HospitalModel hospital, LatLng userPosition) async {
+    try {
+      final route = await RouteService.getRoadRoute(
+        userPosition,
+        LatLng(hospital.lat, hospital.lng),
+      );
+      HospitalModel updatedHospital = hospital;
+      if (route.length > 2) {
+        final roadMeters = RouteService.calculatePolylineDistanceMeters(route);
+        final roadKm = double.parse((roadMeters / 1000.0).toStringAsFixed(1));
+        final roadEtaMin = RouteService.estimateEtaMinutes(roadMeters);
+        updatedHospital = hospital.copyWith(
+          distanceKm: roadKm,
+          estimatedDriveTime: '$roadEtaMin min',
+        );
+      }
+      state = state.copyWith(
+        selectedDestinationHospital: updatedHospital,
+        roadRouteToDestination: route,
+        isLoadingRoute: false,
+      );
+    } catch (_) {
+      state = state.copyWith(isLoadingRoute: false);
+    }
+  }
+
   Future<void> selectHospital(HospitalModel? hospital, {LatLng? userPosition}) async {
     if (hospital == null) {
       state = state.copyWith(
@@ -295,18 +321,7 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
     );
 
     if (userPosition != null) {
-      try {
-        final route = await RouteService.getRoadRoute(
-          userPosition,
-          LatLng(hospital.lat, hospital.lng),
-        );
-        state = state.copyWith(
-          roadRouteToDestination: route,
-          isLoadingRoute: false,
-        );
-      } catch (_) {
-        state = state.copyWith(isLoadingRoute: false);
-      }
+      await _fetchAndApplyRoadRoute(hospital, userPosition);
     }
   }
 
@@ -315,18 +330,7 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
     if (hospital == null) return;
 
     state = state.copyWith(isLoadingRoute: true);
-    try {
-      final route = await RouteService.getRoadRoute(
-        userPosition,
-        LatLng(hospital.lat, hospital.lng),
-      );
-      state = state.copyWith(
-        roadRouteToDestination: route,
-        isLoadingRoute: false,
-      );
-    } catch (_) {
-      state = state.copyWith(isLoadingRoute: false);
-    }
+    await _fetchAndApplyRoadRoute(hospital, userPosition);
   }
 }
 

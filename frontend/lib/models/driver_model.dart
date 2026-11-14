@@ -5,7 +5,8 @@ class DriverModel {
   final String phone;
   final String? photoUrl;
   final String ambulanceNumber;
-  final String ambulanceType; // ALS (Advanced Life Support), BLS, Patient Transport
+  final String
+  ambulanceType; // ALS (Advanced Life Support), BLS, Patient Transport
   final double rating;
   final int totalTrips;
   final double currentLat;
@@ -16,13 +17,13 @@ class DriverModel {
   DriverModel({
     required this.id,
     required this.name,
-    this.title = 'Ambulance Driver',
+    this.title = '',
     required this.phone,
     this.photoUrl,
     required this.ambulanceNumber,
     required this.ambulanceType,
-    this.rating = 4.9,
-    this.totalTrips = 142,
+    this.rating = 5.0,
+    this.totalTrips = 0,
     required this.currentLat,
     required this.currentLng,
     this.heading = 0.0,
@@ -31,17 +32,18 @@ class DriverModel {
 
   factory DriverModel.fromJson(Map<String, dynamic> json) {
     return DriverModel(
-      id: json['id']?.toString() ?? 'drv-1',
-      name: json['name'] ?? 'Ambulance Pilot',
-      title: json['title'] ?? 'Ambulance Driver',
-      phone: json['phone'] ?? '108',
+      id: json['id']?.toString() ?? '',
+      name: (json['name'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      phone: (json['phone'] ?? '').toString(),
       photoUrl: json['photo_url'],
-      ambulanceNumber: json['ambulance_number'] ?? 'TN-01-EM-108',
-      ambulanceType: json['ambulance_type'] ?? 'Advanced Life Support (ALS)',
-      rating: (json['rating'] as num?)?.toDouble() ?? 4.9,
-      totalTrips: json['total_trips'] ?? 142,
-      currentLat: (json['current_lat'] as num?)?.toDouble() ?? 13.0827,
-      currentLng: (json['current_lng'] as num?)?.toDouble() ?? 80.2707,
+      ambulanceNumber: (json['ambulance_number'] ?? '').toString(),
+      ambulanceType: (json['ambulance_type'] ?? 'Advanced Life Support (ALS)')
+          .toString(),
+      rating: (json['rating'] as num?)?.toDouble() ?? 5.0,
+      totalTrips: (json['total_trips'] as num?)?.toInt() ?? 0,
+      currentLat: (json['current_lat'] as num?)?.toDouble() ?? 0.0,
+      currentLng: (json['current_lng'] as num?)?.toDouble() ?? 0.0,
       heading: (json['heading'] as num?)?.toDouble() ?? 0.0,
       lastLocationUpdate: json['last_location_update'] != null
           ? DateTime.parse(json['last_location_update'])

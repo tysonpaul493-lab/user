@@ -66,7 +66,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              user?.name ?? 'Emergency User',
+                              user?.name.trim().isNotEmpty == true
+                                  ? user!.name
+                                  : (user?.phone.trim().isNotEmpty == true
+                                      ? user!.phone
+                                      : 'Tap Edit Profile to add name'),
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 3),

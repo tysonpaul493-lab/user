@@ -434,30 +434,32 @@ class LocationService {
     if (startLat == 0.0 || startLng == 0.0 || endLat == 0.0 || endLng == 0.0) return 0.0;
     final aerial = calculateDistanceKm(startLat, startLng, endLat, endLng);
     if (aerial <= 0.05) return 0.1;
-    // Urban road driving network has turns, intersections, and street layouts.
-    // In Google Maps, driving distance is typically 1.28x to 1.32x of straight-line distance,
-    // plus road ingress/egress.
     final drivingKm = (aerial * 1.28) + 0.15;
     return double.parse(drivingKm.toStringAsFixed(1));
   }
 
-  /// Launch Google Maps driving directions directly for complete user verification & assurance
-  static Future<void> openGoogleMapsRoute({
+  /// Launch external maps driving directions directly for route confirmation
+  static Future<void> openExternalMapsRoute({
     required double originLat,
     required double originLng,
     required double destLat,
     required double destLng,
     String? destName,
   }) async {
-    final googleMapsUrl = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&origin=$originLat,$originLng&destination=$destLat,$destLng&travelmode=driving',
+    final geoUri = Uri.parse('geo:$destLat,$destLng?q=$destLat,$destLng(${Uri.encodeComponent(destName ?? 'Destination Hospital')})');
+    final webRouteUri = Uri.parse(
+      'https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=$originLat%2C$originLng%3B$destLat%2C$destLng',
     );
     try {
-      if (await canLaunchUrl(googleMapsUrl)) {
-        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(geoUri)) {
+        await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+      if (await canLaunchUrl(webRouteUri)) {
+        await launchUrl(webRouteUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      debugPrint('Could not open Google Maps: $e');
+      debugPrint('Could not open external maps: $e');
     }
   }
 }

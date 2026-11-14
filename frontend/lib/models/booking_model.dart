@@ -10,6 +10,7 @@ enum BookingStatus {
   driverArrived,
   patientPickedUp,
   travelingToHospital,
+  arrivedAtHospital,
   tripCompleted,
   cancelled,
   noAmbulanceAvailable,
@@ -32,6 +33,8 @@ extension BookingStatusExtension on BookingStatus {
         return 'Patient Picked Up';
       case BookingStatus.travelingToHospital:
         return 'Traveling to Hospital';
+      case BookingStatus.arrivedAtHospital:
+        return 'Arrived at Hospital';
       case BookingStatus.tripCompleted:
         return 'Trip Completed';
       case BookingStatus.cancelled:
@@ -58,6 +61,8 @@ extension BookingStatusExtension on BookingStatus {
           return 'நோயாளி ஏற்றப்பட்டார்';
         case BookingStatus.travelingToHospital:
           return 'மருத்துவமனைக்கு செல்கிறது';
+        case BookingStatus.arrivedAtHospital:
+          return 'மருத்துவமனையை அடைந்தது';
         case BookingStatus.tripCompleted:
           return 'பயணம் முடிந்தது';
         case BookingStatus.cancelled:
@@ -93,6 +98,10 @@ class BookingModel {
   final int etaMinutes;
   final double distanceKm;
   final DateTime createdAt;
+  final DateTime? acceptedAt;
+  final DateTime? arrivedPickupAt;
+  final DateTime? patientPickedUpAt;
+  final DateTime? completedAt;
   final String? cancellationReason;
 
   BookingModel({
@@ -110,36 +119,54 @@ class BookingModel {
     required this.pickupAddress,
     this.destinationHospital,
     this.driver,
-    this.etaMinutes = 5,
-    this.distanceKm = 1.8,
+    this.etaMinutes = 0,
+    this.distanceKm = 0.0,
     required this.createdAt,
+    this.acceptedAt,
+    this.arrivedPickupAt,
+    this.patientPickedUpAt,
+    this.completedAt,
     this.cancellationReason,
   });
 
   factory BookingModel.fromJson(Map<String, dynamic> json) {
     return BookingModel(
       id: json['id']?.toString() ?? '',
-      referenceNumber: json['reference_number'] ?? '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
+      referenceNumber: json['reference_number'] ?? json['booking_reference'] ?? '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
       status: _statusFromString(json['status']),
       userId: json['user_id']?.toString() ?? '',
-      callbackPhone: json['callback_phone'] ?? '',
+      callbackPhone: json['callback_phone'] ?? json['patient_phone'] ?? '',
       patientName: json['patient_name'],
       emergencyCategory: json['emergency_category'] ?? 'General Emergency',
-      landmark: json['landmark'],
-      notes: json['notes'],
-      pickupLat: (json['pickup_lat'] as num?)?.toDouble() ?? AppConstants.defaultLat,
-      pickupLng: (json['pickup_lng'] as num?)?.toDouble() ?? AppConstants.defaultLng,
+      landmark: json['landmark'] ?? json['pickup_landmark'],
+      notes: json['notes'] ?? json['essential_instructions'],
+      pickupLat: (json['pickup_lat'] as num?)?.toDouble() ?? (json['pickup_latitude'] as num?)?.toDouble() ?? AppConstants.defaultLat,
+      pickupLng: (json['pickup_lng'] as num?)?.toDouble() ?? (json['pickup_longitude'] as num?)?.toDouble() ?? AppConstants.defaultLng,
       pickupAddress: json['pickup_address'] ?? AppConstants.defaultLocationName,
       destinationHospital: json['destination_hospital'] != null
-          ? HospitalModel.fromJson(json['destination_hospital'])
+          ? (json['destination_hospital'] is Map<String, dynamic> 
+              ? HospitalModel.fromJson(json['destination_hospital']) 
+              : null)
           : null,
       driver: json['driver'] != null ? DriverModel.fromJson(json['driver']) : null,
-      etaMinutes: json['eta_minutes'] ?? 5,
-      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 1.8,
+      etaMinutes: (json['eta_minutes'] as num?)?.toInt() ?? 0,
+      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0.0,
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
-      cancellationReason: json['cancellation_reason'],
+      acceptedAt: json['accepted_at'] != null
+          ? DateTime.tryParse(json['accepted_at'].toString())
+          : null,
+      arrivedPickupAt: json['arrived_pickup_at'] != null
+          ? DateTime.tryParse(json['arrived_pickup_at'].toString())
+          : null,
+      patientPickedUpAt: (json['patient_picked_up_at'] ?? json['patient_onboard_at']) != null
+          ? DateTime.tryParse((json['patient_picked_up_at'] ?? json['patient_onboard_at']).toString())
+          : null,
+      completedAt: json['completed_at'] != null
+          ? DateTime.tryParse(json['completed_at'].toString())
+          : null,
+      cancellationReason: json['cancellation_reason'] ?? json['cancel_reason'],
     );
   }
 
@@ -162,6 +189,10 @@ class BookingModel {
       'eta_minutes': etaMinutes,
       'distance_km': distanceKm,
       'created_at': createdAt.toIso8601String(),
+      'accepted_at': acceptedAt?.toIso8601String(),
+      'arrived_pickup_at': arrivedPickupAt?.toIso8601String(),
+      'patient_picked_up_at': patientPickedUpAt?.toIso8601String(),
+      'completed_at': completedAt?.toIso8601String(),
       'cancellation_reason': cancellationReason,
     };
   }
@@ -189,6 +220,9 @@ class BookingModel {
       case 'traveling_to_hospital':
       case 'travelingToHospital':
         return BookingStatus.travelingToHospital;
+      case 'arrived_at_hospital':
+      case 'arrivedAtHospital':
+        return BookingStatus.arrivedAtHospital;
       case 'trip_completed':
       case 'tripCompleted':
         return BookingStatus.tripCompleted;
@@ -220,6 +254,10 @@ class BookingModel {
     int? etaMinutes,
     double? distanceKm,
     DateTime? createdAt,
+    DateTime? acceptedAt,
+    DateTime? arrivedPickupAt,
+    DateTime? patientPickedUpAt,
+    DateTime? completedAt,
     String? cancellationReason,
   }) {
     return BookingModel(
@@ -240,6 +278,10 @@ class BookingModel {
       etaMinutes: etaMinutes ?? this.etaMinutes,
       distanceKm: distanceKm ?? this.distanceKm,
       createdAt: createdAt ?? this.createdAt,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      arrivedPickupAt: arrivedPickupAt ?? this.arrivedPickupAt,
+      patientPickedUpAt: patientPickedUpAt ?? this.patientPickedUpAt,
+      completedAt: completedAt ?? this.completedAt,
       cancellationReason: cancellationReason ?? this.cancellationReason,
     );
   }

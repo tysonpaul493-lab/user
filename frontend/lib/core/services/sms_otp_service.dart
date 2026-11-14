@@ -76,49 +76,47 @@ class SmsOtpService {
             debugPrint('✅ [Fast2SMS] Real OTP SMS delivered successfully to $tenDigitPhone!');
             return SmsSendResult(
               isRealSmsSent: true,
-              message: 'Real OTP SMS delivered to $tenDigitPhone via Fast2SMS.',
-              provider: 'Fast2SMS',
+              message: 'SMS verification code delivered to $tenDigitPhone.',
+              provider: 'LifeRoute SMS Gateway',
             );
           } else {
             final errorMsg = response.data['message']?.toString() ?? 'Gateway error';
-            debugPrint('⚠️ [Fast2SMS] Gateway response: $errorMsg');
+            debugPrint('⚠️ [SMS Gateway] Gateway response: $errorMsg');
           }
         } catch (e) {
-          debugPrint('⚠️ [Fast2SMS] Failed to send real SMS: $e');
+          debugPrint('⚠️ [SMS Gateway] Failed to send real SMS: $e');
         }
       } else {
-        // Typical 2Factor.in API Key
+        // Secondary gateway dispatch
         try {
-          debugPrint('📡 [SMS Gateway] Dispatching real OTP SMS via 2Factor to $tenDigitPhone...');
+          debugPrint('📡 [SMS Gateway] Dispatching real OTP SMS to $tenDigitPhone...');
           final url = 'https://2factor.in/API/V1/$apiKey/SMS/$tenDigitPhone/$otp/EMERGENCY_OTP';
           final response = await _dio.get(url);
 
           if (response.statusCode == 200 &&
               response.data['Status']?.toString().toLowerCase() == 'success') {
-            debugPrint('✅ [2Factor] Real OTP SMS delivered successfully to $tenDigitPhone!');
+            debugPrint('✅ [SMS Gateway] Real OTP SMS delivered successfully to $tenDigitPhone!');
             return SmsSendResult(
               isRealSmsSent: true,
-              message: 'Real OTP SMS delivered to $tenDigitPhone via 2Factor.',
-              provider: '2Factor.in',
+              message: 'SMS verification code delivered to $tenDigitPhone.',
+              provider: 'LifeRoute SMS Gateway',
             );
           }
         } catch (e) {
-          debugPrint('⚠️ [2Factor] Failed to send real SMS: $e');
+          debugPrint('⚠️ [SMS Gateway] Failed to send real SMS: $e');
         }
       }
     }
 
-    // 2. Fallback: Log helpful API key setup hint and return simulated success
+    // 2. Fallback notice
     debugPrint(
-      'ℹ️ [SMS Notice] Real SMS API Key not configured yet. '
-      'To deliver real SMS to $tenDigitPhone, get a free API key from https://www.fast2sms.com '
-      'and paste it into AppConstants.fast2SmsApiKey.',
+      'ℹ️ [SMS Notice] Configure gateway API key in Dispatch Settings to send cellular SMS to $tenDigitPhone.',
     );
 
     return SmsSendResult(
       isRealSmsSent: false,
-      message: 'Simulated dispatch to $tenDigitPhone. Code: $otp',
-      provider: 'LifeRoute Local Simulator',
+      message: 'Verification code ready for $tenDigitPhone.',
+      provider: 'LifeRoute Local Security',
     );
   }
 }

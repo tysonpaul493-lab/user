@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
+import '../../../core/services/sim_detection_service.dart';
 import '../providers/auth_provider.dart';
 import '../../home/screens/home_screen.dart';
 
@@ -15,14 +16,213 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  // Mobile number starts completely empty - no prefill
+  // Name and mobile number start completely empty - no prefill
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   String? _errorMessage;
 
   @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  void _handleEmergencyQuickAccess() async {
+    final storage = ref.read(storageServiceProvider);
+    final recognizedPhone = await SimDetectionService.resolveGenuineSimNumber(
+      storage: storage,
+      currentInput: _phoneController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (recognizedPhone != null && recognizedPhone.isNotEmpty) {
+      await _completeEmergencyAccess(recognizedPhone);
+    } else {
+      _showSimConfirmationModal();
+    }
+  }
+
+  Future<void> _completeEmergencyAccess(String simPhone) async {
+    final success = await ref.read(authProvider.notifier).signInAsEmergencyGuest(
+          genuineSimPhone: simPhone,
+          callerName: _nameController.text.trim(),
+        );
+
+    if (success && mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+  }
+
+  void _showSimConfirmationModal() {
+    final modalPhoneController = TextEditingController(text: _phoneController.text);
+    String? modalError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryRed.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.sim_card_rounded,
+                          color: AppColors.primaryRed,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Device SIM Verification',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Required for 108 Emergency Dispatch',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'To dispatch ambulances to your live GPS, enter your 10-digit SIM mobile number. This will be visible to the responding ambulance driver.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: modalPhoneController,
+                    keyboardType: TextInputType.phone,
+                    autofocus: true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      prefixIcon: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.phone_android_rounded, color: AppColors.primaryRed, size: 20),
+                            SizedBox(width: 6),
+                            Text(
+                              '+91',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Text('|', style: TextStyle(color: AppColors.border, fontSize: 18)),
+                          ],
+                        ),
+                      ),
+                      hintText: 'Enter 10-digit SIM number',
+                      errorText: modalError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: AppColors.primaryRed, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final digits = modalPhoneController.text.replaceAll(RegExp(r'\D'), '');
+                      if (digits.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(digits)) {
+                        setModalState(() {
+                          modalError = 'Please enter a valid 10-digit Indian SIM number';
+                        });
+                        return;
+                      }
+
+                      final simPhone = '+91 $digits';
+                      Navigator.pop(ctx);
+                      await _completeEmergencyAccess(simPhone);
+                    },
+                    icon: const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                    label: const Text(
+                      'Confirm SIM & Dispatch Access',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryRed,
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _handleSignIn() async {
@@ -47,35 +247,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _errorMessage = null);
 
-    // Save user session with this verified SIM number and go straight to Home Screen
+    // Save user session with this verified SIM number and entered name (if any) and go to Home Screen
     final success = await ref
         .read(authProvider.notifier)
-        .signInWithPhoneNumber(digits);
+        .signInWithPhoneNumber(digits, name: _nameController.text.trim());
 
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(
-                Icons.check_circle_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Connected with SIM mobile: +91 $digits',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
@@ -97,7 +274,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               // Language Switcher (EN / TA)
               Align(
-                alignment: Alignment.topRight,
+                alignment: Alignment.centerRight,
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -182,6 +359,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+
+                    // Full Name Field (empty by default, no prefill)
+                    const Text(
+                      'Full Name (Optional)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        prefixIcon: const Icon(
+                          Icons.person_outline_rounded,
+                          color: AppColors.primaryRed,
+                          size: 20,
+                        ),
+                        hintText: 'Enter your full name',
+                        hintStyle: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 15,
+                          fontWeight: FontWeight.normal,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: AppColors.primaryRed,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // Phone Input Field
                     const Text(
@@ -321,60 +544,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ],
                               ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Emergency Hotline 108 Card
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.borderLight),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryRed.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.phone_in_talk_rounded,
-                        color: AppColors.primaryRed,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Immediate Life Threatening Emergency?',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            'Toll-Free Government Hotline: 108 / 112',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primaryRed,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],

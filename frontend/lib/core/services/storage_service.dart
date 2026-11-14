@@ -100,9 +100,9 @@ class StorageService {
     return prefs.getString(AppConstants.localeKey) ?? 'en';
   }
 
-  // Demo Mode
+  // Demo Mode (disabled by default so live server dispatch is always enforced)
   bool isDemoMode() {
-    return prefs.getBool(AppConstants.demoModeKey) ?? true;
+    return prefs.getBool(AppConstants.demoModeKey) ?? false;
   }
 
   Future<void> setDemoMode(bool enabled) async {
@@ -130,7 +130,15 @@ class StorageService {
 
   // Booking History Persistence
   Future<void> saveBookingHistory(List<BookingModel> bookings) async {
-    final list = bookings.map((b) => b.toJson()).toList();
+    final seen = <String>{};
+    final deduped = <BookingModel>[];
+    for (final b in bookings) {
+      final key = b.id.isNotEmpty ? b.id : b.referenceNumber;
+      if (seen.add(key)) {
+        deduped.add(b);
+      }
+    }
+    final list = deduped.map((b) => b.toJson()).toList();
     await prefs.setString(AppConstants.bookingHistoryKey, jsonEncode(list));
   }
 
@@ -139,7 +147,16 @@ class StorageService {
     if (str != null) {
       try {
         final decoded = jsonDecode(str) as List<dynamic>;
-        return decoded.map((e) => BookingModel.fromJson(e)).toList();
+        final seen = <String>{};
+        final result = <BookingModel>[];
+        for (final e in decoded) {
+          final b = BookingModel.fromJson(e);
+          final key = b.id.isNotEmpty ? b.id : b.referenceNumber;
+          if (seen.add(key)) {
+            result.add(b);
+          }
+        }
+        return result;
       } catch (_) {
         return const [];
       }
@@ -154,5 +171,18 @@ class StorageService {
 
   String? getSmsApiKey() {
     return prefs.getString(AppConstants.smsApiKeyStorageKey);
+  }
+
+  // Dispatch Server Host Persistence (for LAN Wi-Fi / USB multi-device testing)
+  Future<void> setServerHost(String? host) async {
+    if (host == null || host.trim().isEmpty) {
+      await prefs.remove(AppConstants.serverHostKey);
+    } else {
+      await prefs.setString(AppConstants.serverHostKey, host.trim());
+    }
+  }
+
+  String? getServerHost() {
+    return prefs.getString(AppConstants.serverHostKey);
   }
 }

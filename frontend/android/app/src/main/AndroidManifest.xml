@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
+    <!-- Telephony & SIM card detection for genuine emergency caller ID -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS"/>
+
     <!-- Precise live GPS location (required for emergency dispatch) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -23,6 +27,9 @@
 
     <!-- Vibration for emergency alerts -->
     <uses-permission android:name="android.permission.VIBRATE"/>
+
+    <!-- Runtime notifications for Android 13+ emergency dispatch alerts -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- Schedule exact alarms for OTP countdown -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
@@ -70,6 +77,7 @@
         <!-- Required for url_launcher to open phone dialler and maps -->
         <intent>
             <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW"/>

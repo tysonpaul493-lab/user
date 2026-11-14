@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 String get _detectedUserHost {
   if (kIsWeb) return 'localhost';
   try {
-    // 127.0.0.1 works with adb reverse for both physical devices and emulators
-    if (Platform.isAndroid) return '127.0.0.1';
+    // Primary default for standalone Android APK on LAN Wi-Fi
+    if (Platform.isAndroid) return AppConstants.fallbackLanHost;
     return 'localhost';
   } catch (_) {
     return 'localhost';
@@ -13,6 +13,87 @@ String get _detectedUserHost {
 }
 
 class AppConstants {
+  /// Default PC LAN IP used automatically on mobile devices when USB adb reverse is unavailable.
+  /// Override at build time via `--dart-define=DEFAULT_LAN_HOST=...` or `--dart-define=DEFAULT_API_URL=...`.
+  static const String fallbackLanHost = String.fromEnvironment(
+    'DEFAULT_LAN_HOST',
+    defaultValue: '192.168.0.112',
+  );
+  static const String configuredApiUrl = String.fromEnvironment(
+    'DEFAULT_API_URL',
+    defaultValue: '',
+  );
+
+  static String? _customServerHost;
+  static String? _runtimeFallbackHost;
+
+  /// Effective server IP/hostname for both REST API and live WebSocket dispatch
+  static String get effectiveHost =>
+      _customServerHost ?? _runtimeFallbackHost ?? _detectedUserHost;
+  static bool get hasCustomServerHost => _customServerHost != null;
+
+  /// Ordered unique list of candidate backend hosts for automatic connection resolution.
+  static List<String> get candidateHosts {
+    if (kIsWeb) {
+      return [
+        if (_customServerHost != null && _customServerHost!.isNotEmpty)
+          _customServerHost!
+        else
+          'localhost',
+      ];
+    }
+
+    final hosts = <String>[];
+    void addHost(String? value) {
+      final cleaned = value?.trim() ?? '';
+      if (cleaned.isNotEmpty && !hosts.contains(cleaned)) {
+        hosts.add(cleaned);
+      }
+    }
+
+    if (_customServerHost != null && _customServerHost!.isNotEmpty) {
+      addHost(_customServerHost);
+      return hosts;
+    }
+
+    addHost(_runtimeFallbackHost);
+    addHost(fallbackLanHost);
+    try {
+      if (Platform.isAndroid) {
+        addHost('10.0.2.2');
+        addHost('127.0.0.1');
+      }
+    } catch (_) {}
+    addHost('localhost');
+    return hosts;
+  }
+
+  /// Configure detected runtime fallback host without overwriting explicit user setting.
+  static void setRuntimeFallbackHost(String? host) {
+    final trimmed = host?.trim() ?? '';
+    _runtimeFallbackHost = trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// Configure custom server host/IP (or null/empty to revert to automatic detection)
+  static void setServerHost(String? rawHost) {
+    final trimmed = rawHost?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      _customServerHost = null;
+      _runtimeFallbackHost = null;
+      return;
+    }
+    var cleaned = trimmed.replaceAll(RegExp(r'^https?://', caseSensitive: false), '');
+    cleaned = cleaned.split('/').first.trim();
+    if (cleaned.contains(':')) {
+      cleaned = cleaned.split(':').first.trim();
+    }
+    _customServerHost = cleaned.isEmpty ? null : cleaned;
+    _runtimeFallbackHost = null;
+  }
+
+  /// Build base API URL for an explicit host
+  static String baseUrlForHost(String host) => 'http://$host:8000/api';
+
   static const String appName = 'LifeRoute Emergency';
   static const String appVersion = '1.0.0';
 
@@ -21,14 +102,17 @@ class AppConstants {
   static const String nationalEmergencyNumber = '112'; // Universal Emergency Hotline
   static const String alternateHotline = '999';
 
-  // Laravel Backend Defaults
-  static const String defaultBaseUrl = 'https://api.liferoute-emergency.com/api';
-  static String get defaultLocalBaseUrl => 'http://$_detectedUserHost:8000/api';
-  static String get reverbHost => _detectedUserHost;
+  // Dispatch Backend Defaults
+  static String get defaultBaseUrl => configuredApiUrl.isNotEmpty
+      ? configuredApiUrl
+      : defaultLocalBaseUrl;
+  static String get defaultLocalBaseUrl => baseUrlForHost(effectiveHost);
+  static String get reverbHost => effectiveHost;
   static const int reverbPort = 8080;
   static const String reverbAppKey = 'liferoute_reverb_key';
 
   // Storage Keys
+  static const String serverHostKey = 'lr_server_host';
   static const String tokenKey = 'lr_auth_token';
   static const String userKey = 'lr_user_data';
   static const String localeKey = 'lr_locale_pref';

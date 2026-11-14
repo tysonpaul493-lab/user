@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/services/reverb_socket_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../models/booking_model.dart';
@@ -43,10 +46,7 @@ class BookingState {
     this.currentAddress = AppConstants.defaultLocationName,
     this.currentFullAddress = 'Acquiring live GPS address...',
     this.isGpsStale = false,
-    this.chatMessages = const [
-      'Ambulance dispatched. On my way with sirens on.',
-      'Heavy traffic avoided via rapid-response bypass.',
-    ],
+    this.chatMessages = const [],
   });
 
   String get pickupAddress => currentAddress;
@@ -66,7 +66,9 @@ class BookingState {
     List<String>? chatMessages,
   }) {
     return BookingState(
-      activeBooking: clearActiveBooking ? null : (activeBooking ?? this.activeBooking),
+      activeBooking: clearActiveBooking
+          ? null
+          : (activeBooking ?? this.activeBooking),
       bookingHistory: bookingHistory ?? this.bookingHistory,
       isCreatingBooking: isCreatingBooking ?? this.isCreatingBooking,
       isSearching: isSearching ?? this.isSearching,
@@ -87,11 +89,12 @@ class BookingNotifier extends StateNotifier<BookingState> {
   final StorageService _storageService;
   StreamSubscription<BookingModel>? _bookingSub;
   StreamSubscription<DriverModel>? _driverLocationSub;
+  StreamSubscription<Map<String, dynamic>>? _chatSub;
   StreamSubscription<Position>? _positionStreamSub;
   Timer? _staleGpsChecker;
 
   BookingNotifier(this._apiClient, this._reverbService, this._storageService)
-      : super(BookingState()) {
+    : super(BookingState()) {
     _loadBookingHistory();
     _initLocation();
     _listenToReverbEvents();
@@ -102,57 +105,6 @@ class BookingNotifier extends StateNotifier<BookingState> {
     final history = _storageService.getBookingHistory();
     if (history.isNotEmpty) {
       state = state.copyWith(bookingHistory: history);
-    } else {
-      final initialTrip = BookingModel(
-        id: 'completed_trip_108',
-        referenceNumber: '#108-TN-CBE-9941',
-        status: BookingStatus.tripCompleted,
-        userId: '1',
-        callbackPhone: '+91 98765 43210',
-        patientName: 'Subramanian Raman',
-        emergencyCategory: 'Cardiac Emergency (108 ALS)',
-        pickupLat: 11.0168,
-        pickupLng: 76.9558,
-        pickupAddress: 'Door No. 14B, 3rd Cross, NSR Road, Saibaba Colony, Coimbatore District, Tamil Nadu - 641011',
-        landmark: 'Near Ganga Hospital Annexe',
-        notes: 'High-flow oxygen given, continuous ECG, vitals stabilized',
-        destinationHospital: HospitalModel(
-          id: 'cmch-coimbatore-108',
-          name: 'Government Coimbatore Medical College Hospital (CMCH 108)',
-          address: 'Avinashi Road, Near Collectorate, Coimbatore District - 641018',
-          emergencyPhone: '108',
-          lat: 11.0028,
-          lng: 76.9669,
-          distanceKm: 2.4,
-          estimatedDriveTime: '6 min',
-          emergencyServices: const [
-            'Free 108 Emergency',
-            'Level 1 Trauma Care',
-            'Emergency ICU',
-            'Cardiac Cath Lab',
-          ],
-          hasTraumaCenter: true,
-          hasIcuBed: true,
-        ),
-        driver: DriverModel(
-          id: 'drv_108_cbe',
-          name: 'Muruganandam',
-          title: '108 Ambulance Pilot',
-          phone: '+91 94431 10800',
-          ambulanceNumber: 'TN 38 G 1084',
-          ambulanceType: '108 ALS Ambulance',
-          currentLat: 11.0028,
-          currentLng: 76.9669,
-          rating: 4.95,
-          totalTrips: 1420,
-          lastLocationUpdate: DateTime.now().subtract(const Duration(minutes: 45)),
-        ),
-        distanceKm: 3.2,
-        etaMinutes: 0,
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      );
-      state = state.copyWith(bookingHistory: [initialTrip]);
-      _storageService.saveBookingHistory([initialTrip]);
     }
   }
 
@@ -161,12 +113,16 @@ class BookingNotifier extends StateNotifier<BookingState> {
     try {
       final cachedPos = await Geolocator.getLastKnownPosition();
       if (cachedPos != null) {
-        final addressInfo = await LocationService.reverseGeocode(cachedPos.latitude, cachedPos.longitude);
+        final addressInfo = await LocationService.reverseGeocode(
+          cachedPos.latitude,
+          cachedPos.longitude,
+        );
         state = state.copyWith(
           currentLat: cachedPos.latitude,
           currentLng: cachedPos.longitude,
           currentAddress: addressInfo['shortAddress'] ?? state.currentAddress,
-          currentFullAddress: addressInfo['fullAddress'] ?? state.currentFullAddress,
+          currentFullAddress:
+              addressInfo['fullAddress'] ?? state.currentFullAddress,
         );
       }
     } catch (e) {
@@ -174,7 +130,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
     }
 
     // 2. Fetch fresh high-accuracy GPS fix
-    final loc = await LocationService.getCurrentLocation(forceHighAccuracy: true);
+    final loc = await LocationService.getCurrentLocation(
+      forceHighAccuracy: true,
+    );
     if (loc.isAccurate) {
       state = state.copyWith(
         currentLat: loc.latitude,
@@ -187,17 +145,28 @@ class BookingNotifier extends StateNotifier<BookingState> {
     // 3. Subscribe to continuous live GPS updates
     _positionStreamSub?.cancel();
     try {
-      _positionStreamSub = LocationService.getPositionStream().listen((pos) async {
-        final addressMap = await LocationService.reverseGeocode(pos.latitude, pos.longitude);
-        state = state.copyWith(
-          currentLat: pos.latitude,
-          currentLng: pos.longitude,
-          currentAddress: addressMap['shortAddress'] ?? 'Live Location (${pos.latitude.toStringAsFixed(3)}, ${pos.longitude.toStringAsFixed(3)})',
-          currentFullAddress: addressMap['fullAddress'] ?? addressMap['shortAddress'] ?? 'GPS: ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
-        );
-      }, onError: (err) {
-        debugPrint('Live position stream error: $err');
-      });
+      _positionStreamSub = LocationService.getPositionStream().listen(
+        (pos) async {
+          final addressMap = await LocationService.reverseGeocode(
+            pos.latitude,
+            pos.longitude,
+          );
+          state = state.copyWith(
+            currentLat: pos.latitude,
+            currentLng: pos.longitude,
+            currentAddress:
+                addressMap['shortAddress'] ??
+                'Live Location (${pos.latitude.toStringAsFixed(3)}, ${pos.longitude.toStringAsFixed(3)})',
+            currentFullAddress:
+                addressMap['fullAddress'] ??
+                addressMap['shortAddress'] ??
+                'GPS: ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
+          );
+        },
+        onError: (err) {
+          debugPrint('Live position stream error: $err');
+        },
+      );
     } catch (e) {
       debugPrint('Failed to start live position stream: $e');
     }
@@ -208,17 +177,23 @@ class BookingNotifier extends StateNotifier<BookingState> {
     try {
       final cachedPos = await Geolocator.getLastKnownPosition();
       if (cachedPos != null) {
-        final addressInfo = await LocationService.reverseGeocode(cachedPos.latitude, cachedPos.longitude);
+        final addressInfo = await LocationService.reverseGeocode(
+          cachedPos.latitude,
+          cachedPos.longitude,
+        );
         state = state.copyWith(
           currentLat: cachedPos.latitude,
           currentLng: cachedPos.longitude,
           currentAddress: addressInfo['shortAddress'] ?? state.currentAddress,
-          currentFullAddress: addressInfo['fullAddress'] ?? state.currentFullAddress,
+          currentFullAddress:
+              addressInfo['fullAddress'] ?? state.currentFullAddress,
         );
       }
     } catch (_) {}
 
-    final loc = await LocationService.getCurrentLocation(forceHighAccuracy: true);
+    final loc = await LocationService.getCurrentLocation(
+      forceHighAccuracy: true,
+    );
     if (loc.isAccurate) {
       state = state.copyWith(
         currentLat: loc.latitude,
@@ -250,11 +225,103 @@ class BookingNotifier extends StateNotifier<BookingState> {
       currentLat: lat,
       currentLng: lng,
       currentAddress: addressMap['shortAddress'] ?? 'Selected Location',
-      currentFullAddress: addressMap['fullAddress'] ?? addressMap['shortAddress'] ?? 'Selected Location',
+      currentFullAddress:
+          addressMap['fullAddress'] ??
+          addressMap['shortAddress'] ??
+          'Selected Location',
     );
   }
 
   Timer? _activeBookingPoller;
+  BookingStatus? _lastNotifiedStatus;
+
+  void _notifyStatusChange(BookingModel booking) {
+    if (_lastNotifiedStatus == booking.status) return;
+    _lastNotifiedStatus = booking.status;
+
+    final notifId =
+        (int.tryParse(booking.id) ?? DateTime.now().millisecondsSinceEpoch) %
+        100000;
+    final driverName = booking.driver?.name.isNotEmpty == true
+        ? booking.driver!.name
+        : 'Assigned Pilot';
+    final ambNum = booking.driver?.ambulanceNumber.isNotEmpty == true
+        ? ' (${booking.driver!.ambulanceNumber})'
+        : '';
+
+    switch (booking.status) {
+      case BookingStatus.findingAmbulance:
+        NotificationService.showEmergencyNotification(
+          id: notifId,
+          title: '🚨 Dispatch Pending: Finding Ambulance',
+          body:
+              'Broadcasting your emergency request to all nearby ambulances...',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.driverAssigned:
+        NotificationService.showEmergencyNotification(
+          id: notifId,
+          title: '🚑 Ambulance Assigned!',
+          body:
+              '$driverName$ambNum is on the way. ETA: ${booking.etaMinutes} mins.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.driverApproaching:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 1,
+          title: '🚑 Ambulance Approaching',
+          body: 'Your ambulance is nearing your pickup point. Keep patient ready.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.driverArrived:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 2,
+          title: '🚨 Ambulance Arrived at Location',
+          body: '$driverName$ambNum has reached the emergency pickup point.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.patientPickedUp:
+      case BookingStatus.travelingToHospital:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 3,
+          title: '🏥 En Route to Hospital',
+          body:
+              'Patient onboard. Navigating to ${booking.destinationHospital?.name ?? "hospital emergency bay"}.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.arrivedAtHospital:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 4,
+          title: '🏥 Arrived at Hospital Emergency Bay',
+          body: 'Ambulance safely docked at emergency trauma bay.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.tripCompleted:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 5,
+          title: '✅ Emergency Trip Completed',
+          body: 'Patient safely admitted. Thank you for using LifeRoute Emergency.',
+          payload: booking.id,
+        );
+        break;
+      case BookingStatus.cancelled:
+        NotificationService.showEmergencyNotification(
+          id: notifId + 6,
+          title: '⚠️ Dispatch Cancelled',
+          body: 'Ambulance booking dispatch was cancelled.',
+          payload: booking.id,
+        );
+        break;
+      default:
+        break;
+    }
+  }
 
   /// Complete trip when destination hospital is reached
   void completeTrip() {
@@ -264,7 +331,16 @@ class BookingNotifier extends StateNotifier<BookingState> {
         status: BookingStatus.tripCompleted,
         etaMinutes: 0,
       );
-      final updatedHistory = [completed, ...state.bookingHistory];
+      _notifyStatusChange(completed);
+      final filteredHistory = state.bookingHistory
+          .where(
+            (b) =>
+                b.id != completed.id &&
+                (completed.referenceNumber.isEmpty ||
+                    b.referenceNumber != completed.referenceNumber),
+          )
+          .toList();
+      final updatedHistory = [completed, ...filteredHistory];
       state = state.copyWith(
         clearActiveBooking: true,
         bookingHistory: updatedHistory,
@@ -275,40 +351,97 @@ class BookingNotifier extends StateNotifier<BookingState> {
     }
   }
 
+  bool _isPollerInFlight = false;
+  int _pollerTick = 0;
+
   void _startActiveBookingPoller(String bookingId) {
     _activeBookingPoller?.cancel();
-    _activeBookingPoller = Timer.periodic(const Duration(seconds: 2), (_) async {
+    _pollerTick = 0;
+    _activeBookingPoller = Timer.periodic(const Duration(seconds: 4), (
+      _,
+    ) async {
       if (state.activeBooking == null) {
         _activeBookingPoller?.cancel();
         return;
       }
 
+      if (_isPollerInFlight) return;
+
+      // When WebSocket is connected and streaming live push updates,
+      // poll the REST API once every 12s as a fallback to avoid overloading the server.
+      if (_reverbService.isConnected) {
+        _pollerTick = (_pollerTick + 1) % 3;
+        if (_pollerTick != 0) return;
+      }
+
+      _isPollerInFlight = true;
       try {
         final res = await _apiClient.getBooking(bookingId);
         if (res['status'] == 'success' && res['booking'] != null) {
           final serverBooking = BookingModel.fromJson(res['booking']);
           _reverbService.updateCurrentBooking(serverBooking);
+          _notifyStatusChange(serverBooking);
 
           if (serverBooking.status == BookingStatus.tripCompleted) {
             _activeBookingPoller?.cancel();
             completeTrip();
-          } else if (serverBooking.driver != null && state.activeBooking?.driver == null) {
+          } else if (serverBooking.status == BookingStatus.cancelled) {
+            _activeBookingPoller?.cancel();
+            _reverbService.disconnect();
+            final cancelled = serverBooking.copyWith(
+              status: BookingStatus.cancelled,
+            );
+            final updatedHistory = [cancelled, ...state.bookingHistory];
+            state = state.copyWith(
+              clearActiveBooking: true,
+              isSearching: false,
+              bookingHistory: updatedHistory,
+            );
+            _storageService.saveBookingHistory(updatedHistory);
+          } else if (serverBooking.driver != null &&
+              state.activeBooking?.driver == null) {
             state = state.copyWith(
               activeBooking: serverBooking,
               isSearching: false,
             );
           } else if (serverBooking.driver != null) {
-            state = state.copyWith(
-              activeBooking: serverBooking,
-            );
+            state = state.copyWith(activeBooking: serverBooking);
           }
         }
-      } catch (_) {}
+      } catch (_) {} finally {
+        _isPollerInFlight = false;
+      }
     });
+  }
+
+  /// Re-sync WebSocket and active booking status after app resumes from background on mobile
+  Future<void> reconnectLiveSync() async {
+    final active = state.activeBooking;
+    if (active == null) return;
+    _reverbService.reconnectIfActive();
+    try {
+      final res = await _apiClient.getBooking(active.id);
+      if (res['status'] == 'success' && res['booking'] != null) {
+        final serverBooking = BookingModel.fromJson(res['booking']);
+        _reverbService.updateCurrentBooking(serverBooking);
+        _notifyStatusChange(serverBooking);
+        if (serverBooking.status == BookingStatus.tripCompleted) {
+          completeTrip();
+        } else {
+          state = state.copyWith(
+            activeBooking: serverBooking,
+            isSearching:
+                serverBooking.status == BookingStatus.findingAmbulance &&
+                serverBooking.driver == null,
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   void _listenToReverbEvents() {
     _bookingSub = _reverbService.bookingStream.listen((updatedBooking) {
+      _notifyStatusChange(updatedBooking);
       if (updatedBooking.status == BookingStatus.tripCompleted) {
         final updatedHistory = [updatedBooking, ...state.bookingHistory];
         state = state.copyWith(
@@ -326,7 +459,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
       }
     });
 
-    _driverLocationSub = _reverbService.driverLocationStream.listen((updatedDriver) {
+    _driverLocationSub = _reverbService.driverLocationStream.listen((
+      updatedDriver,
+    ) {
       if (state.activeBooking != null) {
         final updatedBooking = state.activeBooking!.copyWith(
           driver: updatedDriver,
@@ -337,14 +472,35 @@ class BookingNotifier extends StateNotifier<BookingState> {
         );
       }
     });
-  }
 
+    _chatSub = _reverbService.chatMessageStream.listen((chatData) {
+      final sender = chatData['sender']?.toString() ?? '';
+      final text = chatData['message']?.toString().trim() ?? '';
+      if (text.isNotEmpty && sender != 'user') {
+        final entry = '__driver__:$text';
+        if (state.chatMessages.isNotEmpty && state.chatMessages.last == entry) {
+          return;
+        }
+        final driverName = state.activeBooking?.driver?.name.isNotEmpty == true
+            ? state.activeBooking!.driver!.name
+            : 'Ambulance Pilot';
+        NotificationService.showDriverChatNotification(
+          id: DateTime.now().millisecondsSinceEpoch % 100000,
+          title: '💬 Message from $driverName',
+          body: text,
+        );
+        state = state.copyWith(chatMessages: [...state.chatMessages, entry]);
+      }
+    });
+  }
 
   void _startStaleGpsChecker() {
     _staleGpsChecker = Timer.periodic(const Duration(seconds: 5), (_) {
       if (state.activeBooking?.driver != null) {
         final last = state.activeBooking!.driver!.lastLocationUpdate;
-        final isStale = DateTime.now().difference(last).inSeconds > AppConstants.staleLocationSeconds;
+        final isStale =
+            DateTime.now().difference(last).inSeconds >
+            AppConstants.staleLocationSeconds;
         if (state.isGpsStale != isStale) {
           state = state.copyWith(isGpsStale: isStale);
         }
@@ -361,19 +517,24 @@ class BookingNotifier extends StateNotifier<BookingState> {
     String? notes,
     HospitalModel? destinationHospital,
   }) async {
-    state = state.copyWith(isCreatingBooking: true, isSearching: true, errorMessage: null);
+    _lastNotifiedStatus = null;
+    state = state.copyWith(
+      isCreatingBooking: true,
+      isSearching: true,
+      errorMessage: null,
+      chatMessages: const [],
+    );
 
     final user = _storageService.getUser();
-    final effectivePhone = (callbackPhone != null && callbackPhone.trim().isNotEmpty)
+    final effectivePhone =
+        (callbackPhone != null && callbackPhone.trim().isNotEmpty)
         ? callbackPhone.trim()
-        : ((user?.phone != null && user!.phone.isNotEmpty)
-            ? user.phone
-            : '+91 84283 04510');
+        : ((user?.phone.trim().isNotEmpty == true)
+              ? user!.phone.trim()
+              : (_storageService.getLastRegisteredPhone() ?? ''));
     final effectiveName = (patientName != null && patientName.trim().isNotEmpty)
         ? patientName.trim()
-        : ((user?.name != null && user!.name.isNotEmpty)
-            ? user.name
-            : 'Emergency Requester');
+        : (user?.name.trim() ?? '');
 
     final bookingData = {
       'pickup_lat': state.currentLat,
@@ -440,8 +601,18 @@ class BookingNotifier extends StateNotifier<BookingState> {
         status: BookingStatus.cancelled,
         cancellationReason: reason,
       );
+      _notifyStatusChange(cancelledBooking);
+      _lastNotifiedStatus = null;
 
-      final updatedHistory = [cancelledBooking, ...state.bookingHistory];
+      final filteredHistory = state.bookingHistory
+          .where(
+            (b) =>
+                b.id != cancelledBooking.id &&
+                (cancelledBooking.referenceNumber.isEmpty ||
+                    b.referenceNumber != cancelledBooking.referenceNumber),
+          )
+          .toList();
+      final updatedHistory = [cancelledBooking, ...filteredHistory];
       state = state.copyWith(
         clearActiveBooking: true,
         isSearching: false,
@@ -455,10 +626,17 @@ class BookingNotifier extends StateNotifier<BookingState> {
     }
   }
 
-  void addChatMessage(String message) {
-    state = state.copyWith(
-      chatMessages: [...state.chatMessages, message],
-    );
+  Future<void> addChatMessage(String message) async {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) return;
+    if (state.chatMessages.isNotEmpty && state.chatMessages.last == trimmed) {
+      return;
+    }
+    state = state.copyWith(chatMessages: [...state.chatMessages, trimmed]);
+    final booking = state.activeBooking;
+    if (booking != null) {
+      await _apiClient.sendChatMessage(booking.id, trimmed, sender: 'user');
+    }
   }
 
   @override
@@ -466,13 +644,16 @@ class BookingNotifier extends StateNotifier<BookingState> {
     _activeBookingPoller?.cancel();
     _bookingSub?.cancel();
     _driverLocationSub?.cancel();
+    _chatSub?.cancel();
     _positionStreamSub?.cancel();
     _staleGpsChecker?.cancel();
     super.dispose();
   }
 }
 
-final bookingProvider = StateNotifierProvider<BookingNotifier, BookingState>((ref) {
+final bookingProvider = StateNotifierProvider<BookingNotifier, BookingState>((
+  ref,
+) {
   final apiClient = ref.watch(apiClientProvider);
   final reverb = ref.watch(reverbServiceProvider);
   final storage = ref.watch(storageServiceProvider);

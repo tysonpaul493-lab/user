@@ -18,7 +18,8 @@ class AppLocalizations {
       'dispatchTitle': 'DISPATCH EMERGENCY AMBULANCE',
       'destinationHospital': 'DESTINATION HOSPITAL',
       'roadRoute': 'ROAD ROUTE',
-      'selectHospitalHint': 'Tap to select nearest hospital in your surroundings',
+      'selectHospitalHint':
+          'Tap to select nearest hospital in your surroundings',
       'select': 'Select',
       'pressForSos': 'PRESS TO BOOK AMBULANCE',
       'instantDispatch': 'Instant Dispatch',
@@ -48,7 +49,8 @@ class AppLocalizations {
 
       // Booking Sheet
       'dispatchEmergencyAmbulance': 'Dispatch Emergency Ambulance',
-      'dispatchSub': 'Rapid response unit dispatched immediately upon confirmation',
+      'dispatchSub':
+          'Rapid response unit dispatched immediately upon confirmation',
       'pickupAddress': 'Pickup Address (from GPS)',
       'emergencyCategory': 'Emergency Category',
       'typesAvailable': 'Types Available',
@@ -79,7 +81,8 @@ class AppLocalizations {
       'message': 'Message Crew',
       'cancelRequest': 'Cancel Request',
       'reachedHospital': 'Destination Hospital Reached',
-      'handoverDone': 'Patient safely handed over to Emergency Trauma Department.',
+      'handoverDone':
+          'Patient safely handed over to Emergency Trauma Department.',
       'completeAndReturn': 'Complete Trip & Return Home',
     },
     'ta': {
@@ -100,7 +103,8 @@ class AppLocalizations {
       'dispatchTitle': 'அவசர ஆம்புலன்ஸ் அனுப்புங்கள்',
       'destinationHospital': 'இலக்கு மருத்துவமனை',
       'roadRoute': 'சாலை வழிப்பாதை',
-      'selectHospitalHint': 'உங்கள் அருகிலுள்ள மருத்துவமனையைத் தேர்ந்தெடுக்கவும்',
+      'selectHospitalHint':
+          'உங்கள் அருகிலுள்ள மருத்துவமனையைத் தேர்ந்தெடுக்கவும்',
       'select': 'தேர்வு செய்',
       'pressForSos': 'ஆம்புலன்ஸ் முன்பதிவு செய்ய அழுத்தவும்',
       'instantDispatch': 'உடனடி ஆம்புலன்ஸ்',
@@ -136,7 +140,8 @@ class AppLocalizations {
       'typesAvailable': 'வகைகள் உள்ளன',
       'estimatedFare': 'மதிப்பிடப்பட்ட கட்டணம் (108 இலவசம்)',
       'chooseNearestHospital': 'அருகிலுள்ள மருத்துவமனையைத் தேர்வுசெய்க',
-      'tapToSelectHospital': 'சுற்றியுள்ள அவசர சிகிச்சை மையங்களிலிருந்து தேர்வு செய்யவும்',
+      'tapToSelectHospital':
+          'சுற்றியுள்ள அவசர சிகிச்சை மையங்களிலிருந்து தேர்வு செய்யவும்',
       'assistanceNotes': 'மருத்துவ உதவிக் குறிப்புகள்',
       'autoFilled': 'பிரிவு அடிப்படையில் நிரப்பப்பட்டது',
       'dispatchNow': 'இப்போதே ஆம்புலன்ஸ் அனுப்பவும்',
@@ -161,7 +166,8 @@ class AppLocalizations {
       'message': 'செய்தி அனுப்பவும்',
       'cancelRequest': 'கோரிக்கையை ரத்துசெய்',
       'reachedHospital': 'மருத்துவமனை வந்து சேர்ந்தது',
-      'handoverDone': 'நோயாளி அவசர சிகிச்சை பிரிவில் பாதுகாப்பாக ஒப்படைக்கப்பட்டார்.',
+      'handoverDone':
+          'நோயாளி அவசர சிகிச்சை பிரிவில் பாதுகாப்பாக ஒப்படைக்கப்பட்டார்.',
       'completeAndReturn': 'பயணத்தை முடித்து முகப்புக்குச் செல்லவும்',
     },
     'hi': {
@@ -205,7 +211,8 @@ class AppLocalizations {
       'emergencyTripHistory': 'आपातकालीन यात्रा इतिहास',
       'tripHistorySubtitle': 'पिछली एम्बुलेंस यात्राएं और लॉग देखें',
       'emergencyContacts': 'आपातकालीन संपर्क',
-      'emergencyContactsDesc': 'एम्बुलेंस बुक करने पर इन संपर्कों को आपकी लाइव लोकेशन भेजी जाएगी।',
+      'emergencyContactsDesc':
+          'एम्बुलेंस बुक करने पर इन संपर्कों को आपकी लाइव लोकेशन भेजी जाएगी।',
       'addContact': 'आपातकालीन संपर्क जोड़ें',
       'logOut': 'लॉग आउट (Log Out)',
       'confirmLogout': 'क्या आप वाकई लॉग आउट करना चाहते हैं?',

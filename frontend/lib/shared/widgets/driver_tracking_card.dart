@@ -64,9 +64,12 @@ class DriverTrackingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Red bold driver name (matching reference image)
                 Text(
-                  driver.name,
+                  driver.name.trim().isNotEmpty
+                      ? driver.name
+                      : (driver.ambulanceNumber.trim().isNotEmpty
+                          ? driver.ambulanceNumber
+                          : driver.phone),
                   style: const TextStyle(
                     color: AppColors.primaryRed,
                     fontSize: 18,
@@ -74,15 +77,17 @@ class DriverTrackingCard extends StatelessWidget {
                     letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  driver.title,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                if (driver.title.trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    driver.title,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 5),
                 Wrap(
                   spacing: 6,

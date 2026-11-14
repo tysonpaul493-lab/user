@@ -45,6 +45,13 @@ class CustomMapWidget extends StatefulWidget {
 class _CustomMapWidgetState extends State<CustomMapWidget> {
   late final MapController _effectiveMapController;
   bool _isMapReady = false;
+  String? _lastFittedRouteSignature;
+
+  static bool _isValidLatLng(LatLng? p) =>
+      p != null &&
+      p.latitude.isFinite &&
+      p.longitude.isFinite &&
+      !(p.latitude == 0.0 && p.longitude == 0.0);
 
   @override
   void initState() {
@@ -52,10 +59,71 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     _effectiveMapController = widget.mapController ?? MapController();
   }
 
+  String _routeFitSignature() {
+    final ambLen = widget.routePoints?.length ?? 0;
+    final ambEnd = ambLen > 0 ? widget.routePoints!.last : null;
+    final hospLen = widget.hospitalRoutePoints?.length ?? 0;
+    final hospEnd = hospLen > 0 ? widget.hospitalRoutePoints!.last : null;
+    return '$ambLen:${ambEnd?.latitude.toStringAsFixed(3)},${ambEnd?.longitude.toStringAsFixed(3)}|'
+        '$hospLen:${hospEnd?.latitude.toStringAsFixed(3)},${hospEnd?.longitude.toStringAsFixed(3)}|'
+        '${widget.hospitalPosition?.latitude.toStringAsFixed(3)},${widget.hospitalPosition?.longitude.toStringAsFixed(3)}';
+  }
+
+  void _fitActiveBoundsIfNeeded({bool force = false}) {
+    if (!_isMapReady) return;
+    final sig = _routeFitSignature();
+    final hasRoutes = (widget.routePoints != null && widget.routePoints!.length >= 2) ||
+        (widget.hospitalRoutePoints != null && widget.hospitalRoutePoints!.length >= 2);
+    if (!force && !hasRoutes) return;
+    if (!force && _lastFittedRouteSignature == sig) return;
+
+    final points = <LatLng>[
+      if (widget.routePoints != null) ...widget.routePoints!.where(_isValidLatLng),
+      if (widget.hospitalRoutePoints != null) ...widget.hospitalRoutePoints!.where(_isValidLatLng),
+      if (_isValidLatLng(widget.userPosition)) widget.userPosition!,
+      if (_isValidLatLng(widget.driverPosition)) widget.driverPosition!,
+      if (_isValidLatLng(widget.hospitalPosition)) widget.hospitalPosition!,
+    ];
+
+    if (points.length >= 2) {
+      try {
+        final bounds = LatLngBounds.fromPoints(points);
+        _effectiveMapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.fromLTRB(48, 120, 48, 190),
+            maxZoom: 16.5,
+          ),
+        );
+        _lastFittedRouteSignature = sig;
+        return;
+      } catch (_) {}
+    }
+
+    if (force) {
+      try {
+        final target = _isValidLatLng(widget.userPosition)
+            ? widget.userPosition!
+            : widget.center;
+        _effectiveMapController.move(target, 15.5);
+      } catch (_) {}
+    }
+  }
+
   @override
   void didUpdateWidget(covariant CustomMapWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_isMapReady && widget.center != oldWidget.center) {
+    if (!_isMapReady) return;
+
+    final hasRoute = (widget.routePoints != null && widget.routePoints!.length >= 2) ||
+        (widget.hospitalRoutePoints != null && widget.hospitalRoutePoints!.length >= 2);
+
+    if (hasRoute) {
+      _fitActiveBoundsIfNeeded();
+      return;
+    }
+
+    if (widget.center != oldWidget.center) {
       try {
         final zoom = _effectiveMapController.camera.zoom;
         _effectiveMapController.move(widget.center, zoom);
@@ -80,11 +148,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
   }
 
   void _recenter() {
-    if (!_isMapReady) return;
-    try {
-      final target = widget.userPosition ?? widget.center;
-      _effectiveMapController.move(target, 15.5);
-    } catch (_) {}
+    _fitActiveBoundsIfNeeded(force: true);
   }
 
   @override
@@ -92,18 +156,22 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     final markers = <Marker>[];
 
     // 1. User Pickup Pin Marker
-    final effectiveUserPos = widget.userPosition ?? widget.center;
-    markers.add(
-      Marker(
-        point: effectiveUserPos,
-        width: 58,
-        height: 58,
-        child: _buildUserPinMarker(),
-      ),
-    );
+    final effectiveUserPos = _isValidLatLng(widget.userPosition)
+        ? widget.userPosition!
+        : widget.center;
+    if (_isValidLatLng(effectiveUserPos)) {
+      markers.add(
+        Marker(
+          point: effectiveUserPos,
+          width: 58,
+          height: 58,
+          child: _buildUserPinMarker(),
+        ),
+      );
+    }
 
     // 2. Destination Hospital Marker (Always visible with clear hospital badge)
-    if (widget.hospitalPosition != null) {
+    if (_isValidLatLng(widget.hospitalPosition)) {
       markers.add(
         Marker(
           point: widget.hospitalPosition!,
@@ -116,7 +184,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     }
 
     // 3. Driver Ambulance Marker
-    if (widget.driverPosition != null) {
+    if (_isValidLatLng(widget.driverPosition)) {
       markers.add(
         Marker(
           point: widget.driverPosition!,
@@ -147,6 +215,9 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
             onMapReady: () {
               if (mounted) {
                 setState(() => _isMapReady = true);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _fitActiveBoundsIfNeeded();
+                });
               }
             },
             onTap: (_, pos) {

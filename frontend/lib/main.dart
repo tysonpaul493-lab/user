@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/constants/app_constants.dart';
+import 'core/network/api_client.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/theme/app_theme.dart';
@@ -12,6 +13,17 @@ void main() async {
 
   // Initialize secure local storage & shared preferences
   final storageService = await StorageService.init();
+  AppConstants.setServerHost(storageService.getServerHost());
+
+  // Fast auto-resolution of server host (LAN Wi-Fi, USB, emulator)
+  if (!AppConstants.hasCustomServerHost) {
+    try {
+      await ApiClient.resolveReachableHost().timeout(
+        const Duration(milliseconds: 2500),
+        onTimeout: () => null,
+      );
+    } catch (_) {}
+  }
 
   // Initialize push notification & background message handlers
   await NotificationService.initialize();

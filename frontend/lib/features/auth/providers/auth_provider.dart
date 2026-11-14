@@ -97,7 +97,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)
-  Future<bool> signInWithPhoneNumber(String phone) async {
+  Future<bool> signInWithPhoneNumber(String phone, {String? name}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
@@ -108,13 +108,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     final existing = _storageService.getRegisteredUserByPhone(tenDigit) ??
         _storageService.getUser();
-    final name = (existing != null && existing.name.isNotEmpty)
-        ? existing.name
-        : 'Emergency User';
+    final trimmedInputName = name?.trim() ?? '';
+    final resolvedName = trimmedInputName.isNotEmpty
+        ? trimmedInputName
+        : (existing != null && existing.name.trim().isNotEmpty ? existing.name.trim() : '');
 
     final user = UserModel(
       id: existing?.id ?? 'usr-${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
+      name: resolvedName,
       phone: formattedPhone,
       bloodGroup: existing?.bloodGroup,
       emergencyNotes: existing?.emergencyNotes,
@@ -136,7 +137,59 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _apiClient.updateProfile({
         'phone': formattedPhone,
-        'name': name,
+        'name': resolvedName,
+      });
+    } catch (_) {}
+
+    return true;
+  }
+
+  /// 1-Tap Emergency Quick Access using genuine recognized SIM mobile number (Immediate SOS)
+  Future<bool> signInAsEmergencyGuest({
+    required String genuineSimPhone,
+    String? callerName,
+  }) async {
+    final cleanDigits = genuineSimPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanDigits.length < 10) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Valid 10-digit SIM mobile number required for emergency ambulance dispatch.',
+      );
+      return false;
+    }
+
+    final last10 = cleanDigits.substring(cleanDigits.length - 10);
+    final normalizedPhone = '+91 $last10';
+
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    final emergencyId = 'emergency-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    final resolvedName = (callerName != null && callerName.trim().isNotEmpty)
+        ? callerName.trim()
+        : 'Emergency Caller';
+
+    final emergencyUser = UserModel(
+      id: emergencyId,
+      name: resolvedName,
+      phone: normalizedPhone,
+      bloodGroup: null,
+      emergencyNotes: 'Immediate 108 Emergency Dispatch Access (SIM Verified)',
+    );
+
+    await _storageService.saveUser(emergencyUser);
+    await _storageService.saveToken('token_$emergencyId');
+    await _storageService.saveLastRegisteredPhone(normalizedPhone);
+
+    state = state.copyWith(
+      user: emergencyUser,
+      currentPhone: normalizedPhone,
+      isLoading: false,
+      isOtpSent: false,
+    );
+
+    try {
+      await _apiClient.updateProfile({
+        'phone': normalizedPhone,
+        'name': resolvedName,
       });
     } catch (_) {}
 
@@ -154,18 +207,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> sendOtp(String phone, {String? customOtp}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final code = customOtp ?? (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
-
-      // Dispatch real SMS OTP to Indian mobile number via Fast2SMS / 2Factor gateway
-      final currentKey = state.smsApiKey ?? _storageService.getSmsApiKey();
-      await SmsOtpService.sendRealOtpSms(
-        phone: phone,
-        otp: code,
-        customApiKey: currentKey,
-      );
-
       final res = await _apiClient.sendOtp(phone);
       if (res['status'] == 'success') {
+        final serverOtp = (res['verification_code'] ?? res['dev_otp'] ?? res['otp'])?.toString();
+        final code = customOtp ??
+            serverOtp ??
+            (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+
+        if (res['sms_dispatched'] != true) {
+          final currentKey = state.smsApiKey ?? _storageService.getSmsApiKey();
+          await SmsOtpService.sendRealOtpSms(
+            phone: phone,
+            otp: code,
+            customApiKey: currentKey,
+          );
+        }
         state = state.copyWith(
           isLoading: false,
           isOtpSent: true,
@@ -221,7 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             ? registeredUser.name
             : (rawUser['name']?.toString().isNotEmpty == true)
                 ? rawUser['name'].toString()
-                : (existingUser?.name.isNotEmpty == true ? existingUser!.name : 'Emergency User');
+                : (existingUser?.name.isNotEmpty == true ? existingUser!.name : '');
 
         final bloodGroup = (registeredUser?.bloodGroup != null && registeredUser!.bloodGroup!.isNotEmpty)
             ? registeredUser.bloodGroup

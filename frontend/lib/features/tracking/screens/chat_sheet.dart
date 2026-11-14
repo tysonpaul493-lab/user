@@ -105,8 +105,11 @@ class _DriverChatSheetState extends ConsumerState<DriverChatSheet> {
             child: ListView.builder(
               itemCount: bookingState.chatMessages.length,
               itemBuilder: (context, index) {
-                final isDriver = index < 2;
-                final msg = bookingState.chatMessages[index];
+                final rawMsg = bookingState.chatMessages[index];
+                final isDriver = index < 2 || rawMsg.startsWith('__driver__:');
+                final msg = rawMsg.startsWith('__driver__:')
+                    ? rawMsg.substring('__driver__:'.length)
+                    : rawMsg;
 
                 return Align(
                   alignment: isDriver ? Alignment.centerLeft : Alignment.centerRight,

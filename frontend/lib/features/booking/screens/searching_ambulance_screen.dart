@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../models/booking_model.dart';
 import '../../../models/hospital_model.dart';
@@ -25,10 +26,12 @@ class SearchingAmbulanceScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SearchingAmbulanceScreen> createState() => _SearchingAmbulanceScreenState();
+  ConsumerState<SearchingAmbulanceScreen> createState() =>
+      _SearchingAmbulanceScreenState();
 }
 
-class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScreen>
+class _SearchingAmbulanceScreenState
+    extends ConsumerState<SearchingAmbulanceScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _radarController;
 
@@ -42,7 +45,9 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
 
     // Trigger instant booking request
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(bookingProvider.notifier).triggerInstantSos(
+      ref
+          .read(bookingProvider.notifier)
+          .triggerInstantSos(
             patientName: widget.patientName,
             callbackPhone: widget.callbackPhone,
             category: widget.category,
@@ -97,9 +102,7 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Padding(
                   padding: EdgeInsets.symmetric(
                     horizontal: 20.0,
@@ -111,7 +114,10 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                     children: [
                       // Top Reference Badge
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(20),
@@ -160,13 +166,19 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                   builder: (context, child) {
                                     return Container(
                                       width: radarSize * _radarController.value,
-                                      height: radarSize * _radarController.value,
+                                      height:
+                                          radarSize * _radarController.value,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: AppColors.primaryRed.withValues(
-                                            alpha: (1.0 - _radarController.value).clamp(0.0, 0.8),
-                                          ),
+                                          color: AppColors.primaryRed
+                                              .withValues(
+                                                alpha:
+                                                    (1.0 -
+                                                            _radarController
+                                                                .value)
+                                                        .clamp(0.0, 0.8),
+                                              ),
                                           width: 2,
                                         ),
                                       ),
@@ -192,28 +204,70 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                             ),
                           ),
                           SizedBox(height: isCompact ? 14 : 22),
-                          Text(
-                            'Locating Nearest Ambulance...',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: isCompact ? 19 : 22,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Text(
-                              'Connecting with certified rapid-response paramedics and GPS tracking units in your sector.',
+                          if (bookingState.errorMessage != null && !bookingState.isSearching) ...[
+                            Text(
+                              'Dispatch Connection Issue',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: isCompact ? 12.5 : 13.5,
-                                color: AppColors.textSecondary,
-                                height: 1.35,
+                                fontSize: isCompact ? 19 : 21,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryRed,
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: Text(
+                                bookingState.errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                ref.read(bookingProvider.notifier).triggerInstantSos(
+                                      patientName: widget.patientName,
+                                      callbackPhone: widget.callbackPhone,
+                                      category: widget.category,
+                                      landmark: widget.landmark,
+                                      notes: widget.notes,
+                                      destinationHospital: widget.destinationHospital,
+                                    );
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Retry Dispatch'),
+                            ),
+                          ] else ...[
+                            Text(
+                              'Locating Nearest Ambulance...',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: isCompact ? 19 : 22,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                              ),
+                              child: Text(
+                                'Connecting with certified rapid-response paramedics and GPS tracking units in your sector.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 12.5 : 13.5,
+                                  color: AppColors.textSecondary,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
 
@@ -225,7 +279,10 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                         children: [
                           // Details Container with spacious padding
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.surfaceVariant,
                               borderRadius: BorderRadius.circular(16),
@@ -240,15 +297,22 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                     Container(
                                       padding: const EdgeInsets.all(5),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primaryRed.withValues(alpha: 0.12),
+                                        color: AppColors.primaryRed.withValues(
+                                          alpha: 0.12,
+                                        ),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.emergency_rounded, color: AppColors.primaryRed, size: 16),
+                                      child: const Icon(
+                                        Icons.emergency_rounded,
+                                        color: AppColors.primaryRed,
+                                        size: 16,
+                                      ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'EMERGENCY CATEGORY',
@@ -278,23 +342,33 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                 if (widget.destinationHospital != null) ...[
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Divider(height: 1, color: AppColors.borderLight),
+                                    child: Divider(
+                                      height: 1,
+                                      color: AppColors.borderLight,
+                                    ),
                                   ),
                                   Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.all(5),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF059669).withValues(alpha: 0.12),
+                                          color: const Color(0xFF059669)
+                                              .withValues(alpha: 0.12),
                                           shape: BoxShape.circle,
                                         ),
-                                        child: const Icon(Icons.local_hospital_rounded, color: Color(0xFF059669), size: 16),
+                                        child: const Icon(
+                                          Icons.local_hospital_rounded,
+                                          color: Color(0xFF059669),
+                                          size: 16,
+                                        ),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             const Text(
                                               'DESTINATION HOSPITAL',
@@ -336,7 +410,10 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                 // Row 3: Pickup Location
                                 const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: Divider(height: 1, color: AppColors.borderLight),
+                                  child: Divider(
+                                    height: 1,
+                                    color: AppColors.borderLight,
+                                  ),
                                 ),
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,15 +421,21 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                     Container(
                                       padding: const EdgeInsets.all(5),
                                       decoration: BoxDecoration(
-                                        color: AppColors.textSecondary.withValues(alpha: 0.12),
+                                        color: AppColors.textSecondary
+                                            .withValues(alpha: 0.12),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: const Icon(Icons.my_location_rounded, color: AppColors.textSecondary, size: 16),
+                                      child: const Icon(
+                                        Icons.my_location_rounded,
+                                        color: AppColors.textSecondary,
+                                        size: 16,
+                                      ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'PICKUP LOCATION',
@@ -365,7 +448,9 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            bookingState.currentAddress.isNotEmpty
+                                            bookingState
+                                                    .currentAddress
+                                                    .isNotEmpty
                                                 ? bookingState.currentAddress
                                                 : widget.landmark,
                                             style: const TextStyle(
@@ -394,7 +479,11 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                             height: 48,
                             child: OutlinedButton.icon(
                               onPressed: () => _confirmCancel(context),
-                              icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.primaryRed),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: AppColors.primaryRed,
+                              ),
                               label: const Text(
                                 'Cancel Emergency Request',
                                 style: TextStyle(
@@ -404,8 +493,13 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: AppColors.primaryRed, width: 1.5),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                side: const BorderSide(
+                                  color: AppColors.primaryRed,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
                               ),
                             ),
                           ),
@@ -438,10 +532,14 @@ class _SearchingAmbulanceScreenState extends ConsumerState<SearchingAmbulanceScr
           ElevatedButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              ref.read(bookingProvider.notifier).cancelActiveBooking('User cancelled');
+              ref
+                  .read(bookingProvider.notifier)
+                  .cancelActiveBooking('User cancelled');
               Navigator.of(context).pop();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+            ),
             child: const Text('Confirm Cancel'),
           ),
         ],

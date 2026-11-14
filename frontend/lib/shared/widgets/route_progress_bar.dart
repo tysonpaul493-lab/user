@@ -3,11 +3,15 @@ import '../../core/constants/app_colors.dart';
 
 class RouteProgressBar extends StatefulWidget {
   final int etaMinutes;
+  final double? distanceKm;
+  final String? phaseLabel;
   final double progress; // 0.0 to 1.0
 
   const RouteProgressBar({
     super.key,
     required this.etaMinutes,
+    this.distanceKm,
+    this.phaseLabel,
     this.progress = 0.55,
   });
 
@@ -34,24 +38,48 @@ class _RouteProgressBarState extends State<RouteProgressBar>
     super.dispose();
   }
 
+  String _formatDistanceKm(double? km) {
+    if (km == null) return '';
+    if (km <= 0.0) return '0 m';
+    if (km < 1.0) {
+      return '${(km * 1000).round()} m';
+    }
+    return '${km.toStringAsFixed(1)} km';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isArrived = widget.progress >= 0.98 || widget.etaMinutes <= 0;
+    final distText = _formatDistanceKm(widget.distanceKm);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // "Arriving in" - "5 min" header (matching reference design)
+        // Live ETA & Road KM Header
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              isArrived ? 'Ambulance Status' : 'Arriving in',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArrived ? 'Ambulance Status' : (widget.phaseLabel ?? 'Arriving in'),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (distText.isNotEmpty)
+                  Text(
+                    isArrived ? 'At destination' : '$distText remaining',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
             ),
             Row(
               children: [
@@ -64,13 +92,27 @@ class _RouteProgressBarState extends State<RouteProgressBar>
                     shape: BoxShape.circle,
                   ),
                 ),
-                Text(
-                  isArrived ? 'Arrived!' : '${widget.etaMinutes} min',
-                  style: TextStyle(
-                    color: isArrived ? AppColors.success : AppColors.primaryRed,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isArrived ? 'Arrived!' : '${widget.etaMinutes} min',
+                      style: TextStyle(
+                        color: isArrived ? AppColors.success : AppColors.primaryRed,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (!isArrived && distText.isNotEmpty)
+                      Text(
+                        distText,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),

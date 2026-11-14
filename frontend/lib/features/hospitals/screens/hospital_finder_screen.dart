@@ -473,10 +473,10 @@ class _HospitalFinderScreenState extends ConsumerState<HospitalFinderScreen> {
                                   ),
                                   const SizedBox(height: 10),
 
-                                  // Assure on Google Maps Direct Driving Route
+                                  // Open External Maps Driving Route
                                   InkWell(
                                     onTap: () {
-                                      LocationService.openGoogleMapsRoute(
+                                      LocationService.openExternalMapsRoute(
                                         originLat: userLat,
                                         originLng: userLng,
                                         destLat: hospital.lat,
@@ -498,7 +498,7 @@ class _HospitalFinderScreenState extends ConsumerState<HospitalFinderScreen> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              'Verify Route on Google Maps (${liveDistKm.toStringAsFixed(1)} km)',
+                                              'Open Route in Maps App (${liveDistKm.toStringAsFixed(1)} km)',
                                               style: const TextStyle(
                                                 fontSize: 11.5,
                                                 fontWeight: FontWeight.w800,

@@ -859,9 +859,10 @@ class _EmergencyBookingSheetState extends ConsumerState<EmergencyBookingSheet> {
                   final pName = _patientNameController.text.trim().isNotEmpty
                       ? _patientNameController.text.trim()
                       : (authState.user?.name.isNotEmpty == true ? authState.user!.name : 'Emergency Patient');
+                  final savedSimPhone = ref.read(storageServiceProvider).getLastRegisteredPhone() ?? '';
                   final pPhone = (authState.user?.phone != null && authState.user!.phone.isNotEmpty)
                       ? authState.user!.phone
-                      : '+91 84283 04510';
+                      : savedSimPhone;
 
                   // Open searching screen with the category-matched destination hospital and user details
                   Navigator.of(context).push(
