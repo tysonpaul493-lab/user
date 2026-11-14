@@ -4,6 +4,17 @@
   "buildCommand": "cd frontend && ../flutter/bin/flutter build web --release --no-pub",
   "outputDirectory": "frontend/build/web",
   "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
