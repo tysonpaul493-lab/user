@@ -1,8 +1,15 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+const String _kDefaultLiveWebBackend = 'https://actively-legends-tongue-leg.trycloudflare.com/api';
+
 String get _detectedUserHost {
-  if (kIsWeb) return 'localhost';
+  if (kIsWeb) {
+    if (AppConstants.configuredApiUrl.isNotEmpty) {
+      return AppConstants.configuredApiUrl;
+    }
+    return _kDefaultLiveWebBackend;
+  }
   try {
     // Primary default for standalone Android APK on LAN Wi-Fi
     if (Platform.isAndroid) return AppConstants.fallbackLanHost;
@@ -148,8 +155,11 @@ class AppConstants {
       ? configuredApiUrl
       : (_customFullBaseUrl ?? defaultLocalBaseUrl);
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
-  static String get reverbHost => effectiveHost;
-  static const int reverbPort = 8080;
+  static String get reverbHost => effectiveHost.contains('trycloudflare.com')
+      ? 'constantly-influences-claims-understand.trycloudflare.com'
+      : effectiveHost;
+  static int get reverbPort => reverbHost.contains('trycloudflare.com') ? 443 : 8080;
+  static bool get reverbUseTls => reverbHost.contains('trycloudflare.com') || defaultBaseUrl.startsWith('https://');
   static const String reverbAppKey = 'liferoute_reverb_key';
 
   // Storage Keys
