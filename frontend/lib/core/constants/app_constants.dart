@@ -25,6 +25,7 @@ class AppConstants {
   );
 
   static String? _customServerHost;
+  static String? _customFullBaseUrl;
   static String? _runtimeFallbackHost;
 
   /// Effective server IP/hostname for both REST API and live WebSocket dispatch
@@ -38,8 +39,11 @@ class AppConstants {
       return [
         if (_customServerHost != null && _customServerHost!.isNotEmpty)
           _customServerHost!
-        else
+        else ...[
           'localhost',
+          if (fallbackLanHost.isNotEmpty && fallbackLanHost != 'localhost')
+            fallbackLanHost,
+        ],
       ];
     }
 
@@ -79,20 +83,57 @@ class AppConstants {
     final trimmed = rawHost?.trim() ?? '';
     if (trimmed.isEmpty) {
       _customServerHost = null;
+      _customFullBaseUrl = null;
       _runtimeFallbackHost = null;
       return;
     }
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      var url = trimmed;
+      if (url.endsWith('/')) {
+        url = url.substring(0, url.length - 1);
+      }
+      if (!url.endsWith('/api') && !url.endsWith('/api/v1')) {
+        url = '$url/api';
+      }
+      _customFullBaseUrl = url;
+
+      var cleaned = trimmed.replaceAll(RegExp(r'^https?://', caseSensitive: false), '');
+      cleaned = cleaned.split('/').first.trim();
+      if (cleaned.contains(':')) {
+        cleaned = cleaned.split(':').first.trim();
+      }
+      _customServerHost = cleaned.isEmpty ? null : cleaned;
+      _runtimeFallbackHost = null;
+      return;
+    }
+
     var cleaned = trimmed.replaceAll(RegExp(r'^https?://', caseSensitive: false), '');
     cleaned = cleaned.split('/').first.trim();
     if (cleaned.contains(':')) {
       cleaned = cleaned.split(':').first.trim();
     }
     _customServerHost = cleaned.isEmpty ? null : cleaned;
+    _customFullBaseUrl = null;
     _runtimeFallbackHost = null;
   }
 
   /// Build base API URL for an explicit host
-  static String baseUrlForHost(String host) => 'http://$host:8000/api';
+  static String baseUrlForHost(String host) {
+    if (_customFullBaseUrl != null && _customFullBaseUrl!.isNotEmpty) {
+      return _customFullBaseUrl!;
+    }
+    if (configuredApiUrl.isNotEmpty) {
+      return configuredApiUrl;
+    }
+    if (host.startsWith('http://') || host.startsWith('https://')) {
+      var url = host;
+      if (url.endsWith('/')) url = url.substring(0, url.length - 1);
+      if (!url.endsWith('/api') && !url.endsWith('/api/v1')) url = '$url/api';
+      return url;
+    }
+    return 'http://$host:8000/api';
+  }
 
   static const String appName = 'LifeRoute Emergency';
   static const String appVersion = '1.0.0';
@@ -105,8 +146,8 @@ class AppConstants {
   // Dispatch Backend Defaults
   static String get defaultBaseUrl => configuredApiUrl.isNotEmpty
       ? configuredApiUrl
-      : defaultLocalBaseUrl;
-  static String get defaultLocalBaseUrl => baseUrlForHost(effectiveHost);
+      : (_customFullBaseUrl ?? defaultLocalBaseUrl);
+  static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
   static String get reverbHost => effectiveHost;
   static const int reverbPort = 8080;
   static const String reverbAppKey = 'liferoute_reverb_key';

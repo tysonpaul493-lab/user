@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/i18n/app_strings.dart';
 import '../../../core/services/sim_detection_service.dart';
+import '../../../shared/widgets/server_settings_dialog.dart';
 import '../providers/auth_provider.dart';
 import '../../home/screens/home_screen.dart';
 
@@ -544,6 +545,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ],
                               ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => showUserServerSettingsDialog(context, ref),
+                        icon: const Icon(Icons.tune_rounded, size: 14, color: AppColors.textSecondary),
+                        label: const Text(
+                          'Emergency Dispatch Server Settings',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ],
