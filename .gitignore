@@ -3,10 +3,16 @@
 .idea/
 *.iml
 *.log
+.phpunit.result.cache
 
 # Backend
+backend/vendor/
 backend/node_modules/
 backend/.env
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
 
 # Frontend
 frontend/.dart_tool/
@@ -15,4 +21,4 @@ frontend/.flutter-plugins-dependencies
 frontend/.packages
 frontend/.pub/
 frontend/build/
-
+flutter/

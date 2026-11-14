@@ -1,34 +1,69 @@
-# LifeRoute — Emergency Ambulance Booking System
+# LifeRoute — Emergency Ambulance Booking System (User App & Backend)
 
-This repository is organized into dedicated **Frontend** and **Backend** directories:
+This repository contains the complete **User Frontend (Flutter Web & Mobile)** and the **Backend (Laravel API, MySQL & WebSockets)**.
 
 ```
-liferoute emergency user/
-├── frontend/    # Cross-platform Flutter mobile application
-└── backend/     # Laravel 12 (PHP 8.2) REST API, Ratchet WebSocket Server & MySQL persistence
+ambulance-user/
+├── frontend/    # Cross-platform Flutter application (Web & Android/iOS)
+├── backend/     # Laravel 12 (PHP 8.2) REST API, Ratchet WebSocket Server & MySQL schemas
+├── vercel.json  # Vercel deployment configuration for Flutter Web
+└── package.json # Root build configuration for CI/CD deployment
 ```
 
 ---
 
-## 📱 Frontend (Flutter Mobile App)
+## 🌐 Deploying to Vercel (Frontend)
 
-Built with Flutter 3.x / Dart, Riverpod, CartoDB/OSM maps, real-time GPS tracking, and multi-language support (English & Tamil).
+Vercel is designed for **static frontends and serverless apps**. It hosts the Flutter Web user app smoothly.
 
+### How it builds on Vercel:
+When you connect this repository to Vercel, `vercel.json` automatically:
+1. Clones Flutter SDK (`stable`).
+2. Enables Flutter Web.
+3. Compiles the Flutter web application: `cd frontend && flutter build web --release`.
+4. Deploys the output directory: `frontend/build/web`.
+5. Rewrites all routes to `index.html` for single-page routing.
+
+### Vercel Project Settings:
+- **Framework Preset**: `Other`
+- **Root Directory**: `./` (leave default)
+- **Build Command**: auto-configured by `vercel.json`
+- **Output Directory**: `frontend/build/web`
+
+---
+
+## 🚑 Backend Architecture & Hosting
+
+> **Important**: Vercel only hosts static frontends and serverless functions. Persistent long-running services (**MySQL 3306**, **Laravel HTTP 8000**, and **WebSocket daemon 8080**) must run on a standard server, VPS, or cloud platform (e.g. Railway, Render, Fly.io, DigitalOcean, AWS EC2, or your local machine with ngrok/Cloudflare Tunnel).
+
+### Running Backend Locally:
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate --seed
+
+# 1. Start WebSocket Daemon:
+php artisan websocket:serve --host=0.0.0.0 --port=8080
+
+# 2. Start HTTP API:
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+---
+
+## 📱 Running Frontend Locally
+
+### Web:
 ```bash
 cd frontend
 flutter pub get
-flutter run
+flutter run -d chrome
 ```
 
----
-
-## 🚑 Backend (Laravel PHP + MySQL + WebSockets)
-
-Built with Laravel 12 (PHP 8.2), MySQL (`liferoute`), and Ratchet RFC6455 WebSockets (`php artisan websocket:serve`) for live emergency dispatch and driver coordinates.
-
+### Android:
 ```bash
-cd backend
-php artisan migrate --seed
-php artisan websocket:serve --host=0.0.0.0 --port=8080
-php artisan serve --host=0.0.0.0 --port=8000
+cd frontend
+flutter run -d <device_id> --dart-define=DEFAULT_LAN_HOST=<your_backend_ip>
 ```

@@ -1,0 +1,9 @@
+{
+  "name": "ambulance-user",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LifeRoute Emergency User Application",
+  "scripts": {
+    "build": "if [ -d \"flutter\" ]; then cd flutter && git pull && cd ..; else git clone https://github.com/flutter/flutter.git --depth 1 -b stable flutter; fi && ./flutter/bin/flutter config --enable-web && cd frontend && ../flutter/bin/flutter build web --release"
+  }
+}
