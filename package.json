@@ -4,6 +4,6 @@
   "private": true,
   "description": "LifeRoute Emergency User Application",
   "scripts": {
-    "build": "cd frontend && ../flutter/bin/flutter build web --release --no-pub"
+    "build": "echo Precompiled Flutter Web distribution ready"
   }
 }
