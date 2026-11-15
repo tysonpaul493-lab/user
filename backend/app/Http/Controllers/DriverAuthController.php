@@ -199,19 +199,35 @@ class DriverAuthController extends Controller
 
         $driver = $this->findDriverByPhoneKey($key);
         if (!$driver) {
-            return response()->json([
-                'status' => 'error',
-                'registration_required' => true,
-                'message' => 'No registered driver account found for this mobile number. Please register first.',
-            ], 404);
-        }
-
-        if ($driver->password && !Hash::check($password, $driver->password)) {
-            RateLimiter::hit($throttleKey, 300);
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Incorrect password. Tap Forgot Password to reset.',
-            ], 401);
+            // Real-time dynamic pilot registration on first sign-in:
+            // Allows ANY ambulance driver to sign in with their genuine phone number and password immediately.
+            $driver = Driver::create([
+                'name' => 'Ambulance Pilot (' . substr($key, -4) . ')',
+                'phone' => $e164Phone,
+                'phone_key' => $key,
+                'password' => Hash::make($password),
+                'rating' => 5.0,
+                'total_trips' => 0,
+                'vehicle_number' => 'TN38-EMG-' . substr($key, -4),
+                'vehicle_plate' => 'TN38-EMG-' . substr($key, -4),
+                'vehicle_type' => 'als',
+                'vehicle_model' => 'Emergency Response Ambulance',
+                'vehicle_year' => (int) date('Y'),
+                'equipment_list' => ['Oxygen Cylinder', 'First Aid Kit', 'Stretcher'],
+                'operator_affiliation' => '108 Emergency Fleet',
+                'verification_status' => 'approved',
+                'is_online' => true,
+                'lat' => 11.0376,
+                'lng' => 76.9193,
+            ]);
+        } else {
+            if ($driver->password && !Hash::check($password, $driver->password)) {
+                RateLimiter::hit($throttleKey, 300);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Incorrect password. Tap Forgot Password to reset.',
+                ], 401);
+            }
         }
 
         RateLimiter::clear($throttleKey);
