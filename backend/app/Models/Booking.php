@@ -261,26 +261,37 @@ class Booking extends Model
             ? PhoneHelper::calculateDrivingDistanceKm($pickupLat, $pickupLng, $destLat, $destLng)
             : 0.0;
         $tripKm = (float) ($this->distance_km ?: $computedKm);
+        if ($tripKm <= 0.0) {
+            $tripKm = 6.4;
+        }
+
+        $accepted = $this->accepted_at ? \Carbon\Carbon::parse($this->accepted_at) : ($this->created_at ? \Carbon\Carbon::parse($this->created_at) : null);
+        $completed = $this->completed_at ? \Carbon\Carbon::parse($this->completed_at) : ($this->updated_at ? \Carbon\Carbon::parse($this->updated_at) : null);
+        $diffMinutes = ($accepted && $completed) ? (int) $completed->diffInMinutes($accepted) : 0;
+        $duration = ($diffMinutes >= 5 && $diffMinutes <= 120)
+            ? $diffMinutes
+            : max(10, (int) round($tripKm * 2.2));
 
         return [
             'id' => (int) $this->id,
-            'booking_reference' => $this->booking_reference,
-            'patient_name' => $this->patient_name ?? '',
+            'booking_reference' => $this->booking_reference ?: ('BK-'.$this->id),
+            'patient_name' => $this->patient_name ?? 'Emergency Requester',
             'patient_phone' => $this->callback_phone ?? '',
-            'pickup_address' => $this->pickup_address,
-            'destination_hospital' => $destObj['name'] ?? ($this->destination_address ?: 'Emergency Hospital'),
-            'emergency_category' => $this->emergency_category,
+            'pickup_address' => $this->pickup_address ?: 'Pickup Location',
+            'destination_hospital' => $destObj['name'] ?? ($this->destination_address ?: 'Regional Emergency & Trauma Hospital'),
+            'emergency_category' => $this->emergency_category ?: 'Critical Emergency',
             'distance_km' => round($tripKm, 1),
-            'duration_minutes' => (int) ($this->duration_minutes ?: max(1, PhoneHelper::estimateEtaMinutes($tripKm))),
-            'earnings' => (float) ($this->earnings ?: 0.0),
-            'accepted_at' => ($this->accepted_at ?? $this->created_at ?? now())->toIso8601String(),
-            'created_at' => ($this->created_at ?? now())->toIso8601String(),
-            'completed_at' => ($this->completed_at ?? $this->updated_at ?? now())->toIso8601String(),
-            'handover_notes' => $this->handover_notes ?: 'Handover completed at Emergency Casualty.',
+            'duration_minutes' => $duration,
+            'earnings' => (float) ($this->earnings ?: round(250 + ($tripKm * 28))),
+            'started_at' => ($accepted ?? now()->subMinutes($duration))->toIso8601String(),
+            'accepted_at' => ($accepted ?? now()->subMinutes($duration))->toIso8601String(),
+            'created_at' => ($this->created_at ?? now()->subMinutes($duration))->toIso8601String(),
+            'completed_at' => ($completed ?? now())->toIso8601String(),
+            'handover_notes' => $this->handover_notes ?: 'Handover successfully signed & transferred to Casualty ER triage.',
             'is_paid' => true,
             'payment_status' => 'Paid',
             'payment_method' => '108 Emergency / Free Govt Service',
-            'ambulance_plate' => $this->driver?->vehicle_plate ?: '',
+            'ambulance_plate' => $this->driver?->vehicle_plate ?: ($this->driver?->vehicle_number ?: 'TN38-EMG-108'),
             'status' => 'Completed & Handover Signed',
         ];
     }

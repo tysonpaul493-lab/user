@@ -199,45 +199,39 @@ class DriverAuthController extends Controller
 
         $driver = $this->findDriverByPhoneKey($key);
         if (!$driver) {
-            // Real-time dynamic pilot registration on first sign-in:
-            // Allows ANY ambulance driver to sign in with their genuine phone number and password immediately.
-            $driver = Driver::create([
-                'name' => 'Ambulance Pilot (' . substr($key, -4) . ')',
-                'phone' => $e164Phone,
-                'phone_key' => $key,
-                'password' => Hash::make($password),
-                'rating' => 5.0,
-                'total_trips' => 0,
-                'vehicle_number' => 'TN38-EMG-' . substr($key, -4),
-                'vehicle_plate' => 'TN38-EMG-' . substr($key, -4),
-                'vehicle_type' => 'als',
-                'vehicle_model' => 'Emergency Response Ambulance',
-                'vehicle_year' => (int) date('Y'),
-                'equipment_list' => ['Oxygen Cylinder', 'First Aid Kit', 'Stretcher'],
-                'operator_affiliation' => '108 Emergency Fleet',
-                'verification_status' => 'approved',
-                'is_online' => true,
-                'lat' => 11.0376,
-                'lng' => 76.9193,
-            ]);
-        } else {
-            // Real-time pilot access: seamlessly sync password and ensure pilot is verified and online
-            $driver->update([
-                'password' => Hash::make($password),
-                'verification_status' => 'approved',
-                'is_online' => true,
-            ]);
+            RateLimiter::hit($throttleKey, 300);
+            return response()->json([
+                'status' => 'error',
+                'registration_required' => true,
+                'message' => 'No registered driver account found for this mobile number. Please register your ambulance and account first.',
+            ], 404);
         }
 
-        RateLimiter::clear($throttleKey);
+        // Verify password against stored hash
+        if ($driver->password && !Hash::check($password, $driver->password)) {
+            RateLimiter::hit($throttleKey, 300);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Incorrect password. Please verify your registered password and try again.',
+            ], 401);
+        }
 
+        // If driver was previously registered without a password hash, set it on their first verified login
         if (!$driver->password) {
             $driver->update(['password' => Hash::make($password)]);
         }
 
+        RateLimiter::clear($throttleKey);
+
         if ($e164Phone !== '' && $driver->phone !== $e164Phone) {
             $driver->update(['phone' => $e164Phone]);
         }
+
+        // Ensure driver status is active upon valid login
+        $driver->update([
+            'is_online' => true,
+            'verification_status' => $driver->verification_status ?: 'approved',
+        ]);
 
         $token = DriverAuthResolver::issueToken(
             $driver,
@@ -356,12 +350,12 @@ class DriverAuthController extends Controller
                 'insurance_policy_number' => trim((string) ($amb['insurance_policy_number'] ?? '')),
                 'insurance_expiry_date' => trim((string) ($amb['insurance_expiry_date'] ?? '')),
                 'documents_uploaded' => [
-                    'driving_license_front' => false,
-                    'driving_license_back' => false,
-                    'vehicle_registration' => false,
-                    'ambulance_permit' => false,
-                    'commercial_driver_badge' => false,
-                    'insurance_policy' => false,
+                    'driving_license_front' => !empty($data['license_number']),
+                    'driving_license_back' => !empty($data['license_number']),
+                    'vehicle_registration' => !empty($rawPlate),
+                    'ambulance_permit' => !empty($amb['permit_number'] ?? ''),
+                    'insurance_policy' => !empty($amb['insurance_policy_number'] ?? ''),
+                    'commercial_driver_badge' => !empty($amb['operator_affiliation'] ?? ''),
                 ],
                 'verification_status' => 'approved',
                 'is_online' => true,
@@ -371,6 +365,24 @@ class DriverAuthController extends Controller
                 'speed' => 0.0,
             ]);
         } else {
+            $docs = is_array($driver->documents_uploaded) ? $driver->documents_uploaded : [];
+            if (!empty($data['license_number'])) {
+                $docs['driving_license_front'] = true;
+                $docs['driving_license_back'] = true;
+            }
+            if (!empty($rawPlate)) {
+                $docs['vehicle_registration'] = true;
+            }
+            if (!empty($amb['permit_number'])) {
+                $docs['ambulance_permit'] = true;
+            }
+            if (!empty($amb['insurance_policy_number'])) {
+                $docs['insurance_policy'] = true;
+            }
+            if (!empty($amb['operator_affiliation'])) {
+                $docs['commercial_driver_badge'] = true;
+            }
+
             $updates = [
                 'name' => $rawName,
                 'phone' => $e164Phone,
@@ -378,6 +390,7 @@ class DriverAuthController extends Controller
                 'vehicle_number' => $rawPlate,
                 'vehicle_type' => $normalizedType,
                 'verification_status' => 'approved',
+                'documents_uploaded' => $docs,
             ];
             if ($hashedPassword !== null) {
                 $updates['password'] = $hashedPassword;

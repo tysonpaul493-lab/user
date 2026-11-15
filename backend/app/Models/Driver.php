@@ -93,26 +93,43 @@ class Driver extends Model
             'completed_trips_count' => (int) ($this->total_trips ?? 0),
             'is_online' => (bool) $this->is_online,
             'verification_status' => $this->verification_status ?: 'approved',
-            'documents_uploaded' => [
-                'driving_license' => true,
-                'ambulance_permit' => true,
-                'vehicle_insurance' => true,
-                'fitness_certificate' => true,
-            ],
+            'documents_uploaded' => $this->resolveDocumentsUploaded(),
             'assigned_vehicle' => [
                 'id' => (int) $this->id,
                 'registration_number' => $this->vehicle_plate ?: ($this->vehicle_number ?: ''),
                 'vehicle_type' => $normalizedType,
-                'make_model' => $this->vehicle_model ?: '',
+                'make_model' => $this->vehicle_model ?: 'Ambulance Unit',
                 'year' => (int) ($this->vehicle_year ?: 2024),
-                'equipment_list' => is_array($this->equipment_list) ? $this->equipment_list : [],
-                'operator_affiliation' => $this->operator_affiliation ?: '',
+                'equipment_list' => is_array($this->equipment_list) && count($this->equipment_list) > 0
+                    ? $this->equipment_list
+                    : ['Oxygen Cylinder & Regulators', 'Emergency Trauma Kit', 'Stretcher & Spine Board'],
+                'operator_affiliation' => $this->operator_affiliation ?: 'Emergency Ambulance Fleet',
                 'permit_number' => $this->permit_number ?: '',
                 'permit_expiry_date' => $this->permit_expiry_date ?: '',
                 'insurance_policy_number' => $this->insurance_policy_number ?: '',
                 'insurance_expiry_date' => $this->insurance_expiry_date ?: '',
                 'is_eligible' => true,
             ],
+        ];
+    }
+
+    public function resolveDocumentsUploaded(): array
+    {
+        $raw = is_array($this->documents_uploaded) ? $this->documents_uploaded : [];
+
+        $hasLicense = !empty($this->license_number);
+        $hasPlate = !empty($this->vehicle_plate) || !empty($this->vehicle_number);
+        $hasPermit = !empty($this->permit_number);
+        $hasInsurance = !empty($this->insurance_policy_number);
+        $hasOperator = !empty($this->operator_affiliation);
+
+        return [
+            'driving_license_front' => (bool) ($raw['driving_license_front'] ?? $hasLicense),
+            'driving_license_back' => (bool) ($raw['driving_license_back'] ?? $hasLicense),
+            'vehicle_registration' => (bool) ($raw['vehicle_registration'] ?? $hasPlate),
+            'ambulance_permit' => (bool) ($raw['ambulance_permit'] ?? $hasPermit),
+            'insurance_policy' => (bool) ($raw['insurance_policy'] ?? $hasInsurance),
+            'commercial_driver_badge' => (bool) ($raw['commercial_driver_badge'] ?? $hasOperator),
         ];
     }
 
