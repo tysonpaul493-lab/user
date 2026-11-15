@@ -33,6 +33,27 @@ class User extends Authenticatable
         ];
     }
 
+    public static function findByPhone(?string $rawPhone): ?self
+    {
+        if (empty($rawPhone)) {
+            return null;
+        }
+        $digits = preg_replace('/\D/', '', $rawPhone);
+        if (strlen($digits) < 7) {
+            return null;
+        }
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+        return self::where('phone', $rawPhone)
+            ->orWhere('phone', '+91' . $last10)
+            ->orWhere('phone', '+91 ' . $last10)
+            ->orWhere('phone', $last10)
+            ->orWhere('phone', 'LIKE', '%' . $last10)
+            ->orderByRaw("CASE WHEN name IS NOT NULL AND TRIM(name) != '' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->first();
+    }
+
     public function toApiArray(): array
     {
         return [

@@ -37,7 +37,7 @@ class ReverbSocketService {
     _isConnected = true;
     _lastDriver = currentBooking.driver;
 
-    final wsUrl = 'ws://${AppConstants.reverbHost}:${AppConstants.reverbPort}';
+    final wsUrl = _buildWsUrl();
     if (_channel != null && _activeWsUrl == wsUrl) {
       debugPrint('⚡ [Reverb] Already connected to $wsUrl for booking: $bookingId');
       return;
@@ -49,9 +49,20 @@ class ReverbSocketService {
     _connectRealSocket(bookingId);
   }
 
+  String _buildWsUrl() {
+    final useTls = AppConstants.reverbUseTls || kIsWeb || AppConstants.reverbHost.contains('trycloudflare.com');
+    final scheme = useTls ? 'wss' : 'ws';
+    final host = AppConstants.reverbHost;
+    final port = AppConstants.reverbPort;
+    if (useTls && (port == 443 || port == 80)) {
+      return '$scheme://$host';
+    }
+    return '$scheme://$host:$port';
+  }
+
   void _connectRealSocket(String bookingId) {
     try {
-      final wsUrl = 'ws://${AppConstants.reverbHost}:${AppConstants.reverbPort}';
+      final wsUrl = _buildWsUrl();
       debugPrint('🔌 [User WS] Connecting to $wsUrl');
 
       _reconnectTimer?.cancel();

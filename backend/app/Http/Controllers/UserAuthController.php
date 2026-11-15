@@ -99,18 +99,21 @@ class UserAuthController extends Controller
 
         RateLimiter::clear($throttleKey);
 
-        $user = User::where('phone', $phone)
-            ->orWhere('phone', $key)
-            ->first();
+        $inputName = trim((string) $request->input('name', ''));
+        $user = User::findByPhone($rawPhone);
 
         if (!$user) {
             $user = User::create([
                 'public_id' => 'usr-'.((int) (microtime(true) * 1000)),
-                'name' => '',
-                'phone' => $phone,
+                'name' => $inputName,
+                'phone' => '+91 ' . ($key ?: $phone),
                 'blood_group' => 'O+',
                 'emergency_notes' => '',
             ]);
+        } else {
+            if ($inputName !== '' && empty($user->name)) {
+                $user->update(['name' => $inputName]);
+            }
         }
 
         $token = 'sanctum_token_'.base64_encode($phone.':'.((int) (microtime(true) * 1000)));
@@ -122,6 +125,46 @@ class UserAuthController extends Controller
         ]);
     }
 
+    public function lookupUser(Request $request): JsonResponse
+    {
+        $rawPhone = trim((string) ($request->input('phone') ?? $request->query('phone') ?? ''));
+        if ($rawPhone === '') {
+            return response()->json(['status' => 'error', 'message' => 'Phone is required.'], 400);
+        }
+
+        $user = User::findByPhone($rawPhone);
+        if ($user && !empty(trim($user->name))) {
+            return response()->json([
+                'status' => 'success',
+                'exists' => true,
+                'user' => $user->toApiArray(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'exists' => false,
+            'user' => $user ? $user->toApiArray() : null,
+        ]);
+    }
+
+    public function getProfile(Request $request): JsonResponse
+    {
+        $rawPhone = trim((string) ($request->input('phone') ?? $request->query('phone') ?? ''));
+        $user = User::findByPhone($rawPhone);
+        if ($user) {
+            return response()->json([
+                'status' => 'success',
+                'user' => $user->toApiArray(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found.',
+        ], 404);
+    }
+
     public function updateProfile(Request $request): JsonResponse
     {
         $data = $request->all();
@@ -130,27 +173,33 @@ class UserAuthController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Phone number is required.'], 400);
         }
 
-        $key = PhoneHelper::normalizePhone10($rawPhone) ?: $rawPhone;
-        $user = User::where('phone', $rawPhone)
-            ->orWhere('phone', $key)
-            ->first();
+        $user = User::findByPhone($rawPhone);
+        $inputName = trim((string) ($data['name'] ?? ''));
+        $cleanPhone = '+91 ' . (PhoneHelper::normalizePhone10($rawPhone) ?: $rawPhone);
 
         if (!$user) {
             $user = User::create([
                 'public_id' => 'usr-'.((int) (microtime(true) * 1000)),
-                'name' => trim((string) ($data['name'] ?? '')),
-                'phone' => $rawPhone,
-                'blood_group' => trim((string) ($data['blood_group'] ?? '')),
+                'name' => $inputName,
+                'phone' => $cleanPhone,
+                'blood_group' => trim((string) ($data['blood_group'] ?? 'O+')),
                 'emergency_notes' => trim((string) ($data['emergency_notes'] ?? '')),
             ]);
         } else {
-            $user->fill(array_filter([
-                'name' => isset($data['name']) ? trim((string) $data['name']) : null,
-                'phone' => $rawPhone,
-                'blood_group' => isset($data['blood_group']) ? trim((string) $data['blood_group']) : null,
-                'emergency_notes' => isset($data['emergency_notes']) ? trim((string) $data['emergency_notes']) : null,
-            ], static fn ($v) => $v !== null));
-            $user->save();
+            $updates = [];
+            // ONLY update name if a non-empty name was provided! NEVER overwrite an existing name with empty string!
+            if ($inputName !== '') {
+                $updates['name'] = $inputName;
+            }
+            if (!empty($data['blood_group'])) {
+                $updates['blood_group'] = trim((string) $data['blood_group']);
+            }
+            if (isset($data['emergency_notes']) && $data['emergency_notes'] !== '') {
+                $updates['emergency_notes'] = trim((string) $data['emergency_notes']);
+            }
+            if (!empty($updates)) {
+                $user->update($updates);
+            }
         }
 
         return response()->json([

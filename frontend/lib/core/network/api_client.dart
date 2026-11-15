@@ -18,12 +18,12 @@ class ApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 20),
+        sendTimeout: const Duration(seconds: 20),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'Connection': 'close',
         },
       ),
     );
@@ -229,6 +229,21 @@ class ApiClient {
       return {'status': 'error', 'message': e.toString()};
     } catch (e) {
       return {'status': 'error', 'message': e.toString()};
+    }
+  }
+
+  /// Lookup existing user profile by phone number from server
+  Future<Map<String, dynamic>?> lookupUser(String phone) async {
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.get('/auth/lookup-user', queryParameters: {'phone': phone}),
+      );
+      if (response.data is Map && response.data['user'] is Map) {
+        return Map<String, dynamic>.from(response.data['user'] as Map);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

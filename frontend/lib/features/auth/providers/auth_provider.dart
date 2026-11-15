@@ -96,6 +96,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Lookup existing user profile from server by 10-digit phone
+  Future<UserModel?> lookupUser(String phone) async {
+    final clean = phone.replaceAll(RegExp(r'\D'), '');
+    final tenDigit = clean.length >= 10 ? clean.substring(clean.length - 10) : clean;
+    if (tenDigit.length < 10) return null;
+
+    // Check local storage first
+    final local = _storageService.getRegisteredUserByPhone(tenDigit);
+    if (local != null && local.name.trim().isNotEmpty) {
+      return local;
+    }
+
+    // Query backend server
+    try {
+      final res = await _apiClient.lookupUser(tenDigit);
+      if (res != null && res['status'] == 'success' && res['exists'] == true && res['user'] != null) {
+        final userData = res['user'];
+        final serverUser = UserModel(
+          id: (userData['id'] ?? 'usr-$tenDigit').toString(),
+          name: (userData['name'] ?? '').toString(),
+          phone: (userData['phone'] ?? '+91 $tenDigit').toString(),
+          bloodGroup: userData['blood_group']?.toString(),
+          emergencyNotes: userData['emergency_notes']?.toString(),
+        );
+        if (serverUser.name.trim().isNotEmpty) {
+          await _storageService.saveRegisteredUserByPhone(serverUser);
+          return serverUser;
+        }
+      }
+    } catch (_) {}
+
+    return local;
+  }
+
   /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)
   Future<bool> signInWithPhoneNumber(String phone, {String? name}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -106,8 +140,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
         : cleanPhone;
     final formattedPhone = '+91 $tenDigit';
 
-    final existing = _storageService.getRegisteredUserByPhone(tenDigit) ??
-        _storageService.getUser();
+    // 1. Check local storage
+    var existing = _storageService.getRegisteredUserByPhone(tenDigit);
+    if (existing == null || existing.name.trim().isEmpty) {
+      final lastUser = _storageService.getUser();
+      if (lastUser != null && lastUser.phone.replaceAll(RegExp(r'\D'), '').endsWith(tenDigit)) {
+        existing = lastUser;
+      }
+    }
+
+    // 2. Query dispatch server if local record has no name
+    if (existing == null || existing.name.trim().isEmpty) {
+      try {
+        final res = await _apiClient.lookupUser(tenDigit);
+        if (res != null && res['status'] == 'success' && res['exists'] == true && res['user'] != null) {
+          final u = res['user'];
+          existing = UserModel(
+            id: (u['id'] ?? 'usr-$tenDigit').toString(),
+            name: (u['name'] ?? '').toString(),
+            phone: (u['phone'] ?? formattedPhone).toString(),
+            bloodGroup: u['blood_group']?.toString(),
+            emergencyNotes: u['emergency_notes']?.toString(),
+          );
+        }
+      } catch (_) {}
+    }
+
     final trimmedInputName = name?.trim() ?? '';
     final resolvedName = trimmedInputName.isNotEmpty
         ? trimmedInputName
@@ -133,13 +191,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isOtpSent: false,
     );
 
-    // Sync with backend API
-    try {
-      await _apiClient.updateProfile({
-        'phone': formattedPhone,
-        'name': resolvedName,
-      });
-    } catch (_) {}
+    // Sync with backend API only if name is non-empty so we never overwrite an existing name with blank
+    if (resolvedName.isNotEmpty) {
+      try {
+        await _apiClient.updateProfile({
+          'phone': formattedPhone,
+          'name': resolvedName,
+          if (user.bloodGroup != null && user.bloodGroup!.isNotEmpty)
+            'blood_group': user.bloodGroup,
+          if (user.emergencyNotes != null && user.emergencyNotes!.isNotEmpty)
+            'emergency_notes': user.emergencyNotes,
+        });
+      } catch (_) {}
+    }
 
     return true;
   }

@@ -21,6 +21,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   String? _errorMessage;
+  String? _recognizedUserName;
+  // ignore: unused_field
+  bool _isCheckingPhone = false;
+
+  void _onPhoneChanged(String val) async {
+    if (_errorMessage != null) {
+      setState(() => _errorMessage = null);
+    }
+    final digits = val.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 10) {
+      setState(() => _isCheckingPhone = true);
+      try {
+        final user = await ref.read(authProvider.notifier).lookupUser(digits);
+        if (mounted && user != null && user.name.trim().isNotEmpty) {
+          setState(() {
+            _recognizedUserName = user.name.trim();
+            if (_nameController.text.trim().isEmpty) {
+              _nameController.text = user.name.trim();
+            }
+          });
+        }
+      } catch (_) {
+      } finally {
+        if (mounted) setState(() => _isCheckingPhone = false);
+      }
+    } else {
+      if (_recognizedUserName != null) {
+        setState(() => _recognizedUserName = null);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -425,11 +456,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(10),
                       ],
-                      onChanged: (_) {
-                        if (_errorMessage != null) {
-                          setState(() => _errorMessage = null);
-                        }
-                      },
+                      onChanged: _onPhoneChanged,
                       onSubmitted: (_) => _handleSignIn(),
                       style: const TextStyle(
                         fontSize: 17,
@@ -493,6 +520,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
+                    if (_recognizedUserName != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFA5D6A7)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.verified_user_rounded, color: Color(0xFF2E7D32), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Recognized Profile: $_recognizedUserName',
+                                style: const TextStyle(
+                                  color: Color(0xFF1B5E20),
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
 
                     // Direct Enter Button

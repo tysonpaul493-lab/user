@@ -23,11 +23,13 @@ Route::get('/api/v1/health', [HealthController::class, 'health']);
 Route::post('/broadcasting/auth', [HealthController::class, 'broadcastingAuth']);
 Route::post('/api/v1/broadcasting/auth', [HealthController::class, 'broadcastingAuth']);
 
-// User App & Shared Routes (/api/* and /api/v1/*)
-foreach (['/api', '/api/v1'] as $prefix) {
+// User App & Shared Routes (/api/*, /api/v1/*, and root /*)
+foreach (['/api', '/api/v1', ''] as $prefix) {
     Route::prefix($prefix)->group(function () {
         Route::post('/auth/otp/send', [UserAuthController::class, 'sendOtp']);
         Route::post('/auth/otp/verify', [UserAuthController::class, 'verifyOtp']);
+        Route::match(['GET', 'POST'], '/auth/lookup-user', [UserAuthController::class, 'lookupUser']);
+        Route::get('/user/profile', [UserAuthController::class, 'getProfile']);
         Route::put('/user/profile', [UserAuthController::class, 'updateProfile']);
 
         Route::get('/hospitals/nearby', [HospitalController::class, 'nearby']);
