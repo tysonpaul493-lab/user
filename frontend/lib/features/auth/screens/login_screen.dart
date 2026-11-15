@@ -29,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  // ignore: unused_element
   void _handleEmergencyQuickAccess() async {
     final storage = ref.read(storageServiceProvider);
     final recognizedPhone = await SimDetectionService.resolveGenuineSimNumber(
