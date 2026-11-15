@@ -46,6 +46,8 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
   late final MapController _effectiveMapController;
   bool _isMapReady = false;
   String? _lastFittedRouteSignature;
+  DateTime? _lastUserInteraction;
+  double _currentRotation = 0.0;
 
   static bool _isValidLatLng(LatLng? p) =>
       p != null &&
@@ -105,7 +107,8 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
         final target = _isValidLatLng(widget.userPosition)
             ? widget.userPosition!
             : widget.center;
-        _effectiveMapController.move(target, 15.5);
+        _effectiveMapController.moveAndRotate(target, 15.5, 0.0);
+        if (mounted) setState(() => _currentRotation = 0.0);
       } catch (_) {}
     }
   }
@@ -124,30 +127,46 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     }
 
     if (widget.center != oldWidget.center) {
-      try {
-        final zoom = _effectiveMapController.camera.zoom;
-        _effectiveMapController.move(widget.center, zoom);
-      } catch (_) {}
+      final now = DateTime.now();
+      final recentlyInteracted = _lastUserInteraction != null &&
+          now.difference(_lastUserInteraction!).inSeconds < 4;
+      if (!recentlyInteracted) {
+        try {
+          final camera = _effectiveMapController.camera;
+          _effectiveMapController.moveAndRotate(widget.center, camera.zoom, camera.rotation);
+        } catch (_) {}
+      }
     }
   }
 
   void _zoomIn() {
     if (!_isMapReady) return;
     try {
-      final currentZoom = _effectiveMapController.camera.zoom;
-      _effectiveMapController.move(_effectiveMapController.camera.center, math.min(19.0, currentZoom + 1.0));
+      final camera = _effectiveMapController.camera;
+      final targetZoom = math.min(19.0, (camera.zoom + 1.0).roundToDouble());
+      _effectiveMapController.moveAndRotate(camera.center, targetZoom, camera.rotation);
     } catch (_) {}
   }
 
   void _zoomOut() {
     if (!_isMapReady) return;
     try {
-      final currentZoom = _effectiveMapController.camera.zoom;
-      _effectiveMapController.move(_effectiveMapController.camera.center, math.max(4.0, currentZoom - 1.0));
+      final camera = _effectiveMapController.camera;
+      final targetZoom = math.max(4.0, (camera.zoom - 1.0).roundToDouble());
+      _effectiveMapController.moveAndRotate(camera.center, targetZoom, camera.rotation);
+    } catch (_) {}
+  }
+
+  void _resetRotation() {
+    if (!_isMapReady) return;
+    try {
+      _effectiveMapController.rotate(0.0);
+      if (mounted) setState(() => _currentRotation = 0.0);
     } catch (_) {}
   }
 
   void _recenter() {
+    _lastUserInteraction = null;
     _fitActiveBoundsIfNeeded(force: true);
   }
 
@@ -225,12 +244,27 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
               widget.onMapTap?.call();
             },
             onPositionChanged: (camera, hasGesture) {
+              if (mounted && (_currentRotation != camera.rotation)) {
+                setState(() => _currentRotation = camera.rotation);
+              }
               if (hasGesture) {
+                _lastUserInteraction = DateTime.now();
                 widget.onPositionChanged?.call(camera.center);
               }
             },
             interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all,
+              flags: InteractiveFlag.drag |
+                  InteractiveFlag.pinchZoom |
+                  InteractiveFlag.doubleTapZoom |
+                  InteractiveFlag.doubleTapDragZoom |
+                  InteractiveFlag.scrollWheelZoom |
+                  InteractiveFlag.pinchMove |
+                  InteractiveFlag.flingAnimation |
+                  InteractiveFlag.rotate,
+              enableMultiFingerGestureRace: true,
+              rotationThreshold: 22.0,
+              pinchZoomThreshold: 0.35,
+              pinchMoveThreshold: 35.0,
             ),
           ),
           children: [
@@ -287,6 +321,16 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (_currentRotation.abs() > 0.05) ...[
+                _buildMapControlButton(
+                  icon: Icons.navigation_rounded,
+                  onTap: _resetRotation,
+                  tooltip: 'Reset North',
+                  iconColor: AppColors.primaryRed,
+                  rotationAngle: -_currentRotation * (math.pi / 180.0),
+                ),
+                const SizedBox(height: 8),
+              ],
               _buildMapControlButton(
                 icon: Icons.my_location_rounded,
                 onTap: _recenter,
@@ -315,28 +359,40 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     required IconData icon,
     required VoidCallback onTap,
     required String tooltip,
+    Color? iconColor,
+    double? rotationAngle,
   }) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Icon(icon, size: 20, color: AppColors.textPrimary),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.14),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+          border: Border.all(color: AppColors.borderLight),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onTap,
+            child: Center(
+              child: rotationAngle != null && rotationAngle != 0.0
+                  ? Transform.rotate(
+                      angle: rotationAngle,
+                      child: Icon(icon, size: 20, color: iconColor ?? AppColors.textPrimary),
+                    )
+                  : Icon(icon, size: 20, color: iconColor ?? AppColors.textPrimary),
+            ),
+          ),
         ),
       ),
     );

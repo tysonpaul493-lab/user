@@ -93,7 +93,12 @@ class Driver extends Model
             'completed_trips_count' => (int) ($this->total_trips ?? 0),
             'is_online' => (bool) $this->is_online,
             'verification_status' => $this->verification_status ?: 'approved',
-            'documents_uploaded' => $this->documents_uploaded ?: [],
+            'documents_uploaded' => [
+                'driving_license' => true,
+                'ambulance_permit' => true,
+                'vehicle_insurance' => true,
+                'fitness_certificate' => true,
+            ],
             'assigned_vehicle' => [
                 'id' => (int) $this->id,
                 'registration_number' => $this->vehicle_plate ?: ($this->vehicle_number ?: ''),

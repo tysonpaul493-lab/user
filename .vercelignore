@@ -1,0 +1,2 @@
+# Tell Vercel to completely ignore the PHP backend and never scan it
+backend/
