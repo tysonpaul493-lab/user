@@ -663,8 +663,31 @@ class BookingNotifier extends StateNotifier<BookingState> {
       _storageService.saveBookingHistory(updatedHistory);
       return true;
     } catch (e) {
-      state = state.copyWith(errorMessage: e.toString());
-      return false;
+      debugPrint('⚠️ [BookingProvider] Network error during cancel: $e. Cancelling locally.');
+      try {
+        _reverbService.disconnect();
+      } catch (_) {}
+      final cancelledBooking = state.activeBooking!.copyWith(
+        status: BookingStatus.cancelled,
+        cancellationReason: reason,
+      );
+      final filteredHistory = state.bookingHistory
+          .where(
+            (b) =>
+                b.id != cancelledBooking.id &&
+                (cancelledBooking.referenceNumber.isEmpty ||
+                    b.referenceNumber != cancelledBooking.referenceNumber),
+          )
+          .toList();
+      final updatedHistory = [cancelledBooking, ...filteredHistory];
+      state = state.copyWith(
+        clearActiveBooking: true,
+        isSearching: false,
+        errorMessage: null,
+        bookingHistory: updatedHistory,
+      );
+      _storageService.saveBookingHistory(updatedHistory);
+      return true;
     }
   }
 

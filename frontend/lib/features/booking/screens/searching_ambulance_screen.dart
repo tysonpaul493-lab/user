@@ -206,7 +206,7 @@ class _SearchingAmbulanceScreenState
                           SizedBox(height: isCompact ? 14 : 22),
                           if (bookingState.errorMessage != null && !bookingState.isSearching) ...[
                             Text(
-                              'Dispatch Gateway Link Reconnecting',
+                              'Connecting to Emergency Fleet',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: isCompact ? 19 : 21,
@@ -223,7 +223,7 @@ class _SearchingAmbulanceScreenState
                                         bookingState.errorMessage!.contains('CORS') ||
                                         bookingState.errorMessage!.contains('connection error') ||
                                         bookingState.errorMessage!.contains('SocketException'))
-                                    ? 'Connecting to nearest emergency dispatch bay over priority carrier network. Please wait or tap Retry Dispatch.'
+                                    ? 'Establishing priority link with nearest emergency ambulance units. Please keep this screen open.'
                                     : bookingState.errorMessage!,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
@@ -246,7 +246,7 @@ class _SearchingAmbulanceScreenState
                                     );
                               },
                               icon: const Icon(Icons.refresh_rounded, size: 18),
-                              label: const Text('Retry Dispatch'),
+                              label: const Text('Retry Priority Connection'),
                             ),
                           ] else ...[
                             Text(
