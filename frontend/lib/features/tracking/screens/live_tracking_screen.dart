@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -32,29 +33,53 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   bool _lastHeadingToHospital = false;
   bool _hasRealRoadRoute = false;
   bool _isFetchingRoute = false;
+  Timer? _liveTimer;
 
   String _formatStatusTime(BookingModel booking) {
     if (booking.status == BookingStatus.tripCompleted && booking.completedAt != null) {
-      return DateFormat('hh:mm a').format(booking.completedAt!);
+      return DateFormat('hh:mm:ss a').format(booking.completedAt!.toLocal());
     }
     if (booking.status == BookingStatus.patientPickedUp && booking.patientPickedUpAt != null) {
-      return DateFormat('hh:mm a').format(booking.patientPickedUpAt!);
+      return DateFormat('hh:mm:ss a').format(booking.patientPickedUpAt!.toLocal());
     }
     if (booking.status == BookingStatus.driverArrived && booking.arrivedPickupAt != null) {
-      return DateFormat('hh:mm a').format(booking.arrivedPickupAt!);
+      return DateFormat('hh:mm:ss a').format(booking.arrivedPickupAt!.toLocal());
     }
     if (booking.acceptedAt != null) {
-      return DateFormat('hh:mm a').format(booking.acceptedAt!);
+      return DateFormat('hh:mm:ss a').format(booking.acceptedAt!.toLocal());
     }
-    return DateFormat('hh:mm a').format(booking.createdAt);
+    return DateFormat('hh:mm:ss a').format(booking.createdAt.toLocal());
+  }
+
+  String _elapsedTripTime(BookingModel booking) {
+    final startTime = (booking.acceptedAt ?? booking.createdAt).toLocal();
+    final endTime = booking.completedAt?.toLocal() ?? DateTime.now();
+    final diff = endTime.difference(startTime);
+    if (diff.isNegative) return '00:00';
+    final hours = diff.inHours;
+    final minutes = diff.inMinutes.remainder(60);
+    final seconds = diff.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} min';
   }
 
   @override
   void initState() {
     super.initState();
+    _liveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchRoadRoutes();
     });
+  }
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
   }
 
   LatLng _resolveDriverPos(dynamic driver, double userLat, double userLng) {
@@ -411,7 +436,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            '${booking.status.label.toUpperCase()} • ${_formatStatusTime(booking)}',
+                            '${booking.status.label.toUpperCase()} • ⏱ ${_elapsedTripTime(booking)} • ${_formatStatusTime(booking)}',
                             style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
@@ -667,6 +692,48 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
+                          'Live Trip Duration',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          _elapsedTripTime(booking),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppColors.primaryRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Current Live Time',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          DateFormat('hh:mm:ss a').format(DateTime.now()),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
                           'Dispatched Time',
                           style: TextStyle(
                             color: AppColors.textSecondary,
@@ -674,11 +741,11 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                           ),
                         ),
                         Text(
-                          DateFormat('hh:mm:ss a').format(booking.acceptedAt ?? booking.createdAt),
+                          DateFormat('hh:mm:ss a').format((booking.acceptedAt ?? booking.createdAt).toLocal()),
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             fontSize: 13,
-                            color: AppColors.primaryRed,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ],

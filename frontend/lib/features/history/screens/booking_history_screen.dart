@@ -74,7 +74,11 @@ class BookingHistoryScreen extends ConsumerWidget {
         itemCount: displayHistory.length,
         itemBuilder: (context, index) {
           final item = displayHistory[index];
-          final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(item.createdAt);
+          final localCreated = item.createdAt.toLocal();
+          final dateStr = DateFormat('dd MMM yyyy • hh:mm a').format(localCreated);
+          final tripDuration = (item.completedAt != null && item.acceptedAt != null)
+              ? item.completedAt!.difference(item.acceptedAt!)
+              : null;
 
           return GestureDetector(
             onTap: () => _showTripDetailsSheet(context, item, locale),
@@ -128,9 +132,22 @@ class BookingHistoryScreen extends ConsumerWidget {
                         item.emergencyCategory,
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.textPrimary),
                       ),
-                      Text(
-                        dateStr,
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (tripDuration != null)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4.0),
+                              child: Text(
+                                '${tripDuration.inMinutes}m trip •',
+                                style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          Text(
+                            dateStr,
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -283,7 +300,11 @@ class BookingHistoryScreen extends ConsumerWidget {
   }
 
   void _showTripDetailsSheet(BuildContext context, BookingModel item, String locale) {
-    final dateStr = DateFormat('EEEE, dd MMMM yyyy, hh:mm a').format(item.createdAt);
+    final localCreated = item.createdAt.toLocal();
+    final dateStr = DateFormat('EEEE, dd MMMM yyyy • hh:mm a').format(localCreated);
+    final duration = (item.completedAt != null && item.acceptedAt != null)
+        ? item.completedAt!.difference(item.acceptedAt!)
+        : null;
 
     showModalBottomSheet(
       context: context,
@@ -366,12 +387,17 @@ class BookingHistoryScreen extends ConsumerWidget {
                         children: [
                           if (item.acceptedAt != null)
                             Text(
-                              'Dispatched: ${DateFormat('hh:mm:ss a').format(item.acceptedAt!)}',
+                              'Dispatched: ${DateFormat('hh:mm:ss a').format(item.acceptedAt!.toLocal())}',
                               style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                            ),
+                          if (duration != null)
+                            Text(
+                              'Duration: ${duration.inMinutes}m ${duration.inSeconds.remainder(60)}s',
+                              style: const TextStyle(fontSize: 11, color: AppColors.primaryRed, fontWeight: FontWeight.bold),
                             ),
                           if (item.completedAt != null)
                             Text(
-                              'Completed: ${DateFormat('hh:mm:ss a').format(item.completedAt!)}',
+                              'Completed: ${DateFormat('hh:mm:ss a').format(item.completedAt!.toLocal())}',
                               style: const TextStyle(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w700),
                             ),
                         ],

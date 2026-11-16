@@ -152,19 +152,19 @@ class BookingModel {
       etaMinutes: (json['eta_minutes'] as num?)?.toInt() ?? 0,
       distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0.0,
       createdAt: json['created_at'] != null
-          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
+          ? (DateTime.tryParse(json['created_at'].toString())?.toLocal() ?? DateTime.now())
           : DateTime.now(),
       acceptedAt: json['accepted_at'] != null
-          ? DateTime.tryParse(json['accepted_at'].toString())
+          ? DateTime.tryParse(json['accepted_at'].toString())?.toLocal()
           : null,
       arrivedPickupAt: json['arrived_pickup_at'] != null
-          ? DateTime.tryParse(json['arrived_pickup_at'].toString())
+          ? DateTime.tryParse(json['arrived_pickup_at'].toString())?.toLocal()
           : null,
       patientPickedUpAt: (json['patient_picked_up_at'] ?? json['patient_onboard_at']) != null
-          ? DateTime.tryParse((json['patient_picked_up_at'] ?? json['patient_onboard_at']).toString())
+          ? DateTime.tryParse((json['patient_picked_up_at'] ?? json['patient_onboard_at']).toString())?.toLocal()
           : null,
       completedAt: json['completed_at'] != null
-          ? DateTime.tryParse(json['completed_at'].toString())
+          ? DateTime.tryParse(json['completed_at'].toString())?.toLocal()
           : null,
       cancellationReason: json['cancellation_reason'] ?? json['cancel_reason'],
     );

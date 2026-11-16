@@ -79,6 +79,12 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
 
   void _fitActiveBoundsIfNeeded({bool force = false}) {
     if (!_isMapReady) return;
+    if (!force) {
+      final now = DateTime.now();
+      if (_lastUserInteraction != null && now.difference(_lastUserInteraction!).inSeconds < 10) {
+        return; // Preserve user's manual zoom level
+      }
+    }
     final sig = _routeFitSignature();
     final hasRoutes = (widget.routePoints != null && widget.routePoints!.length >= 2) ||
         (widget.hospitalRoutePoints != null && widget.hospitalRoutePoints!.length >= 2);
@@ -124,6 +130,15 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     super.didUpdateWidget(oldWidget);
     if (!_isMapReady) return;
 
+    final now = DateTime.now();
+    final recentlyInteracted = _lastUserInteraction != null &&
+        now.difference(_lastUserInteraction!).inSeconds < 10;
+
+    // Never override camera if the user is zooming or panning
+    if (recentlyInteracted) {
+      return;
+    }
+
     final hasRoute = (widget.routePoints != null && widget.routePoints!.length >= 2) ||
         (widget.hospitalRoutePoints != null && widget.hospitalRoutePoints!.length >= 2);
 
@@ -133,16 +148,31 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     }
 
     if (widget.center != oldWidget.center) {
-      final now = DateTime.now();
-      final recentlyInteracted = _lastUserInteraction != null &&
-          now.difference(_lastUserInteraction!).inSeconds < 4;
-      if (!recentlyInteracted) {
-        try {
-          final camera = _effectiveMapController.camera;
-          _effectiveMapController.moveAndRotate(widget.center, camera.zoom, camera.rotation);
-        } catch (_) {}
-      }
+      try {
+        final camera = _effectiveMapController.camera;
+        _effectiveMapController.moveAndRotate(widget.center, camera.zoom, camera.rotation);
+      } catch (_) {}
     }
+  }
+
+  void _zoomIn() {
+    if (!_isMapReady) return;
+    _lastUserInteraction = DateTime.now();
+    try {
+      final camera = _effectiveMapController.camera;
+      final targetZoom = (camera.zoom + 1.0).clamp(3.5, 19.5);
+      _effectiveMapController.move(camera.center, targetZoom);
+    } catch (_) {}
+  }
+
+  void _zoomOut() {
+    if (!_isMapReady) return;
+    _lastUserInteraction = DateTime.now();
+    try {
+      final camera = _effectiveMapController.camera;
+      final targetZoom = (camera.zoom - 1.0).clamp(3.5, 19.5);
+      _effectiveMapController.move(camera.center, targetZoom);
+    } catch (_) {}
   }
 
   void _resetRotation() {
@@ -217,7 +247,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
           options: MapOptions(
             initialCenter: widget.center,
             initialZoom: widget.zoom,
-            minZoom: 4.0,
+            minZoom: 3.5,
             maxZoom: 19.5,
             onMapReady: () {
               if (mounted) {
@@ -232,12 +262,12 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
               widget.onMapTap?.call();
             },
             onPositionChanged: (camera, hasGesture) {
-              if ((_rotationNotifier.value - camera.rotation).abs() > 0.2) {
-                _rotationNotifier.value = camera.rotation;
-              }
               if (hasGesture) {
                 _lastUserInteraction = DateTime.now();
                 widget.onPositionChanged?.call(camera.center);
+              }
+              if ((_rotationNotifier.value - camera.rotation).abs() > 0.2) {
+                _rotationNotifier.value = camera.rotation;
               }
             },
             interactionOptions: const InteractionOptions(
@@ -246,22 +276,24 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
                   InteractiveFlag.doubleTapZoom |
                   InteractiveFlag.doubleTapDragZoom |
                   InteractiveFlag.scrollWheelZoom |
-                  InteractiveFlag.pinchMove |
-                  InteractiveFlag.flingAnimation |
-                  InteractiveFlag.rotate,
+                  InteractiveFlag.pinchMove,
+              pinchZoomThreshold: 0.05,
+              pinchMoveThreshold: 6.0,
+              scrollWheelVelocity: 0.0035,
               enableMultiFingerGestureRace: false,
-              rotationThreshold: 8.0,
-              pinchZoomThreshold: 0.15,
-              pinchMoveThreshold: 15.0,
             ),
           ),
           children: [
-            // Standard OpenStreetMap daylight roadmap tile layer with CartoDB fallback
+            // Standard OpenStreetMap daylight roadmap tile layer with native memory caching
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.liferoute.emergency',
-              maxZoom: 19,
-              fallbackUrl: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+              maxZoom: 19.5,
+              maxNativeZoom: 18,
+              keepBuffer: 6,
+              panBuffer: 1,
+              tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 100)),
+              evictErrorTileStrategy: EvictErrorTileStrategy.none,
             ),
 
             // Route Polylines (Real road networks via OSRM)
@@ -302,13 +334,29 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
           ],
         ),
 
-        // 3. Floating Quick Recenter & Compass Control
+        // 3. Floating Quick Recenter, Compass & Smooth Zoom Controls
         Positioned(
           right: 14,
           bottom: 24,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Zoom In (+)
+              _buildMapControlButton(
+                icon: Icons.add_rounded,
+                onTap: _zoomIn,
+                tooltip: 'Zoom In',
+              ),
+              const SizedBox(height: 8),
+
+              // Zoom Out (-)
+              _buildMapControlButton(
+                icon: Icons.remove_rounded,
+                onTap: _zoomOut,
+                tooltip: 'Zoom Out',
+              ),
+              const SizedBox(height: 8),
+
               ValueListenableBuilder<double>(
                 valueListenable: _rotationNotifier,
                 builder: (context, rotation, child) {

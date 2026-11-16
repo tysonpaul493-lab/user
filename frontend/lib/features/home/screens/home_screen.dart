@@ -32,9 +32,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   final MapController _mapController = MapController();
   bool _isLocating = false;
 
-  void _safeMoveMap(LatLng target, double zoom) {
+  void _safeMoveMap(LatLng target, [double? zoom]) {
     try {
-      _mapController.move(target, zoom);
+      final effectiveZoom = zoom ?? _mapController.camera.zoom;
+      _mapController.move(target, effectiveZoom);
     } catch (_) {}
   }
 
@@ -190,7 +191,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           previous.currentLat != next.currentLat ||
           previous.currentLng != next.currentLng) {
         if (selectedHospital == null) {
-          _safeMoveMap(LatLng(next.currentLat, next.currentLng), 16.5);
+          _safeMoveMap(LatLng(next.currentLat, next.currentLng));
         } else {
           ref
               .read(hospitalProvider.notifier)
