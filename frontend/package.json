@@ -1,0 +1,9 @@
+{
+  "name": "ambulance-user-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LifeRoute Emergency User Application Frontend",
+  "scripts": {
+    "build": "echo Precompiled Flutter Web distribution ready"
+  }
+}
