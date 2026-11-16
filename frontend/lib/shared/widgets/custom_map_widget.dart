@@ -47,7 +47,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
   bool _isMapReady = false;
   String? _lastFittedRouteSignature;
   DateTime? _lastUserInteraction;
-  double _currentRotation = 0.0;
+  final ValueNotifier<double> _rotationNotifier = ValueNotifier<double>(0.0);
 
   static bool _isValidLatLng(LatLng? p) =>
       p != null &&
@@ -59,6 +59,12 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
   void initState() {
     super.initState();
     _effectiveMapController = widget.mapController ?? MapController();
+  }
+
+  @override
+  void dispose() {
+    _rotationNotifier.dispose();
+    super.dispose();
   }
 
   String _routeFitSignature() {
@@ -108,7 +114,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
             ? widget.userPosition!
             : widget.center;
         _effectiveMapController.moveAndRotate(target, 15.5, 0.0);
-        if (mounted) setState(() => _currentRotation = 0.0);
+        _rotationNotifier.value = 0.0;
       } catch (_) {}
     }
   }
@@ -139,29 +145,11 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
     }
   }
 
-  void _zoomIn() {
-    if (!_isMapReady) return;
-    try {
-      final camera = _effectiveMapController.camera;
-      final targetZoom = math.min(19.0, (camera.zoom + 1.0).roundToDouble());
-      _effectiveMapController.moveAndRotate(camera.center, targetZoom, camera.rotation);
-    } catch (_) {}
-  }
-
-  void _zoomOut() {
-    if (!_isMapReady) return;
-    try {
-      final camera = _effectiveMapController.camera;
-      final targetZoom = math.max(4.0, (camera.zoom - 1.0).roundToDouble());
-      _effectiveMapController.moveAndRotate(camera.center, targetZoom, camera.rotation);
-    } catch (_) {}
-  }
-
   void _resetRotation() {
     if (!_isMapReady) return;
     try {
       _effectiveMapController.rotate(0.0);
-      if (mounted) setState(() => _currentRotation = 0.0);
+      _rotationNotifier.value = 0.0;
     } catch (_) {}
   }
 
@@ -244,8 +232,8 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
               widget.onMapTap?.call();
             },
             onPositionChanged: (camera, hasGesture) {
-              if (mounted && (_currentRotation != camera.rotation)) {
-                setState(() => _currentRotation = camera.rotation);
+              if ((_rotationNotifier.value - camera.rotation).abs() > 0.2) {
+                _rotationNotifier.value = camera.rotation;
               }
               if (hasGesture) {
                 _lastUserInteraction = DateTime.now();
@@ -261,10 +249,10 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
                   InteractiveFlag.pinchMove |
                   InteractiveFlag.flingAnimation |
                   InteractiveFlag.rotate,
-              enableMultiFingerGestureRace: true,
-              rotationThreshold: 22.0,
-              pinchZoomThreshold: 0.35,
-              pinchMoveThreshold: 35.0,
+              enableMultiFingerGestureRace: false,
+              rotationThreshold: 8.0,
+              pinchZoomThreshold: 0.15,
+              pinchMoveThreshold: 15.0,
             ),
           ),
           children: [
@@ -314,39 +302,33 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
           ],
         ),
 
-        // 3. Floating Quick Zoom Controls & Recenter Button
+        // 3. Floating Quick Recenter & Compass Control
         Positioned(
           right: 14,
           bottom: 24,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_currentRotation.abs() > 0.05) ...[
-                _buildMapControlButton(
-                  icon: Icons.navigation_rounded,
-                  onTap: _resetRotation,
-                  tooltip: 'Reset North',
-                  iconColor: AppColors.primaryRed,
-                  rotationAngle: -_currentRotation * (math.pi / 180.0),
-                ),
-                const SizedBox(height: 8),
-              ],
+              ValueListenableBuilder<double>(
+                valueListenable: _rotationNotifier,
+                builder: (context, rotation, child) {
+                  if (rotation.abs() <= 0.05) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: _buildMapControlButton(
+                      icon: Icons.navigation_rounded,
+                      onTap: _resetRotation,
+                      tooltip: 'Reset North',
+                      iconColor: AppColors.primaryRed,
+                      rotationAngle: -rotation * (math.pi / 180.0),
+                    ),
+                  );
+                },
+              ),
               _buildMapControlButton(
                 icon: Icons.my_location_rounded,
                 onTap: _recenter,
                 tooltip: 'Recenter on Pickup',
-              ),
-              const SizedBox(height: 8),
-              _buildMapControlButton(
-                icon: Icons.add_rounded,
-                onTap: _zoomIn,
-                tooltip: 'Zoom In',
-              ),
-              const SizedBox(height: 4),
-              _buildMapControlButton(
-                icon: Icons.remove_rounded,
-                onTap: _zoomOut,
-                tooltip: 'Zoom Out',
               ),
             ],
           ),

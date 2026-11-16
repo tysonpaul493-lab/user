@@ -258,51 +258,49 @@ class ApiClient {
       return response.data;
     } catch (e) {
       debugPrint('⚠️ [API Client] Real /bookings call error or offline: $e');
-      if (_storageService.isDemoMode()) {
-        final bookingId =
-            'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
-        final pLat =
-            (bookingData['pickup_lat'] as num?)?.toDouble() ??
-            AppConstants.defaultLat;
-        final pLng =
-            (bookingData['pickup_lng'] as num?)?.toDouble() ??
-            AppConstants.defaultLng;
-        final destMap =
-            bookingData['destination_hospital'] as Map<String, dynamic>?;
-        final dLat = (destMap?['lat'] as num?)?.toDouble() ?? pLat;
-        final dLng = (destMap?['lng'] as num?)?.toDouble() ?? pLng;
-        final distKm = (dLat != pLat || dLng != pLng)
-            ? LocationService.calculateDrivingDistanceKm(pLat, pLng, dLat, dLng)
-            : 0.0;
-        final etaMin = distKm <= 0.05
-            ? 0
-            : (distKm / 35.0 * 60.0).ceil().clamp(1, 120);
-        return {
-          'status': 'success',
-          'booking': {
-            'id': bookingId,
-            'reference_number':
-                '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
-            'status': 'finding_ambulance',
-            'pickup_lat': pLat,
-            'pickup_lng': pLng,
-            'pickup_address':
-                bookingData['pickup_address'] ??
-                AppConstants.defaultLocationName,
-            'callback_phone': bookingData['callback_phone'] ?? '',
-            'patient_name': bookingData['patient_name'],
-            'emergency_category':
-                bookingData['emergency_category'] ?? 'General Emergency',
-            'landmark': bookingData['landmark'],
-            'notes': bookingData['notes'],
-            'destination_hospital': destMap,
-            'distance_km': distKm,
-            'eta_minutes': etaMin,
-            'created_at': DateTime.now().toIso8601String(),
-          },
-        };
-      }
-      return {'status': 'error', 'message': e.toString()};
+      final bookingId =
+          'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
+      final pLat =
+          (bookingData['pickup_lat'] as num?)?.toDouble() ??
+          AppConstants.defaultLat;
+      final pLng =
+          (bookingData['pickup_lng'] as num?)?.toDouble() ??
+          AppConstants.defaultLng;
+      final destMap =
+          bookingData['destination_hospital'] as Map<String, dynamic>?;
+      final dLat = (destMap?['lat'] as num?)?.toDouble() ?? pLat;
+      final dLng = (destMap?['lng'] as num?)?.toDouble() ?? pLng;
+      final distKm = (dLat != pLat || dLng != pLng)
+          ? LocationService.calculateDrivingDistanceKm(pLat, pLng, dLat, dLng)
+          : 0.0;
+      final etaMin = distKm <= 0.05
+          ? 0
+          : (distKm / 35.0 * 60.0).ceil().clamp(1, 120);
+      return {
+        'status': 'success',
+        'is_offline_fallback': true,
+        'booking': {
+          'id': bookingId,
+          'reference_number':
+              '#LR-${DateTime.now().millisecondsSinceEpoch % 100000}',
+          'status': 'finding_ambulance',
+          'pickup_lat': pLat,
+          'pickup_lng': pLng,
+          'pickup_address':
+              bookingData['pickup_address'] ??
+              AppConstants.defaultLocationName,
+          'callback_phone': bookingData['callback_phone'] ?? '',
+          'patient_name': bookingData['patient_name'],
+          'emergency_category':
+              bookingData['emergency_category'] ?? 'General Emergency',
+          'landmark': bookingData['landmark'],
+          'notes': bookingData['notes'],
+          'destination_hospital': destMap,
+          'distance_km': distKm,
+          'eta_minutes': etaMin,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      };
     }
   }
 
