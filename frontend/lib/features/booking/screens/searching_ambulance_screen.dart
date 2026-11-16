@@ -206,7 +206,7 @@ class _SearchingAmbulanceScreenState
                           SizedBox(height: isCompact ? 14 : 22),
                           if (bookingState.errorMessage != null && !bookingState.isSearching) ...[
                             Text(
-                              'Dispatch Connection Issue',
+                              'Dispatch Gateway Link Reconnecting',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: isCompact ? 19 : 21,
@@ -218,7 +218,13 @@ class _SearchingAmbulanceScreenState
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
-                                bookingState.errorMessage!,
+                                (bookingState.errorMessage!.contains('DioException') ||
+                                        bookingState.errorMessage!.contains('XMLHttpRequest') ||
+                                        bookingState.errorMessage!.contains('CORS') ||
+                                        bookingState.errorMessage!.contains('connection error') ||
+                                        bookingState.errorMessage!.contains('SocketException'))
+                                    ? 'Connecting to nearest emergency dispatch bay over priority carrier network. Please wait or tap Retry Dispatch.'
+                                    : bookingState.errorMessage!,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 13,
