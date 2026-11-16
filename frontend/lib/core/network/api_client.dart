@@ -247,6 +247,85 @@ class ApiClient {
     }
   }
 
+  /// Verify user login with registered mobile number
+  Future<Map<String, dynamic>> loginUser(String phone) async {
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.post('/user/auth/login', data: {'phone': phone}),
+      );
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        if (data['token'] != null) {
+          await _storageService.saveToken(data['token'].toString());
+        }
+        return data;
+      }
+      return {'status': 'success'};
+    } on DioException catch (e) {
+      if (e.response?.data is Map && e.response?.data['message'] != null) {
+        return {
+          'status': 'error',
+          'is_registered': false,
+          'message': e.response!.data['message'].toString(),
+        };
+      }
+      return {
+        'status': 'error',
+        'is_registered': false,
+        'message': 'Wrong mobile number: This number is not registered. Please register first.',
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'is_registered': false,
+        'message': 'Connection error. Please try again.',
+      };
+    }
+  }
+
+  /// Register new emergency user profile
+  Future<Map<String, dynamic>> registerUser({
+    required String name,
+    required String phone,
+    String? bloodGroup,
+    String? emergencyNotes,
+  }) async {
+    try {
+      final response = await _executeWithFailover(
+        () => _dio.post('/user/auth/register', data: {
+          'name': name,
+          'phone': phone,
+          'blood_group': bloodGroup ?? 'O+',
+          'emergency_notes': emergencyNotes ?? '',
+        }),
+      );
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        if (data['token'] != null) {
+          await _storageService.saveToken(data['token'].toString());
+        }
+        return data;
+      }
+      return {'status': 'success'};
+    } on DioException catch (e) {
+      if (e.response?.data is Map && e.response?.data['message'] != null) {
+        return {
+          'status': 'error',
+          'message': e.response!.data['message'].toString(),
+        };
+      }
+      return {
+        'status': 'error',
+        'message': 'Registration error. Please check your network and try again.',
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'message': e.toString(),
+      };
+    }
+  }
+
   /// Create Emergency Ambulance Booking
   Future<Map<String, dynamic>> createBooking(
     Map<String, dynamic> bookingData,

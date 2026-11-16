@@ -130,6 +130,150 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return local;
   }
 
+  /// Verify user login with registered mobile number
+  Future<bool> loginWithPhone(String phone) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final tenDigit = cleanPhone.length >= 10
+        ? cleanPhone.substring(cleanPhone.length - 10)
+        : cleanPhone;
+
+    if (tenDigit.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(tenDigit)) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Please enter a valid 10-digit Indian mobile number.',
+      );
+      return false;
+    }
+
+    // 1. Try server verification first
+    try {
+      final res = await _apiClient.loginUser(tenDigit);
+      if (res['status'] == 'success' && res['user'] != null) {
+        final u = res['user'];
+        final serverUser = UserModel(
+          id: (u['id'] ?? 'usr-$tenDigit').toString(),
+          name: (u['name'] ?? '').toString(),
+          phone: (u['phone'] ?? '+91 $tenDigit').toString(),
+          bloodGroup: u['blood_group']?.toString(),
+          emergencyNotes: u['emergency_notes']?.toString(),
+        );
+
+        await _storageService.saveUser(serverUser);
+        await _storageService.saveRegisteredUserByPhone(serverUser);
+        await _storageService.saveLastRegisteredPhone(tenDigit);
+        if (res['token'] != null) {
+          await _storageService.saveToken(res['token'].toString());
+        }
+
+        state = state.copyWith(
+          user: serverUser,
+          currentPhone: serverUser.phone,
+          isLoading: false,
+          errorMessage: null,
+        );
+        return true;
+      } else if (res['is_registered'] == false) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: res['message']?.toString() ??
+              'Wrong mobile number: This number is not registered. Please register first.',
+        );
+        return false;
+      }
+    } catch (_) {}
+
+    // 2. Check local registered user database as offline fallback
+    final local = _storageService.getRegisteredUserByPhone(tenDigit);
+    if (local != null && local.name.trim().isNotEmpty) {
+      await _storageService.saveUser(local);
+      await _storageService.saveLastRegisteredPhone(tenDigit);
+      await _storageService.saveToken('token_$tenDigit');
+
+      state = state.copyWith(
+        user: local,
+        currentPhone: local.phone,
+        isLoading: false,
+        errorMessage: null,
+      );
+      return true;
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      errorMessage: 'Wrong mobile number: This number is not registered. Please switch to Register.',
+    );
+    return false;
+  }
+
+  /// Register a new user profile
+  Future<bool> registerNewUser({
+    required String name,
+    required String phone,
+    String? bloodGroup,
+    String? emergencyNotes,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    final tenDigit = cleanPhone.length >= 10
+        ? cleanPhone.substring(cleanPhone.length - 10)
+        : cleanPhone;
+
+    if (name.trim().isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Full Name is required for registration.',
+      );
+      return false;
+    }
+
+    if (tenDigit.length != 10 || !RegExp(r'^[6-9]\d{9}$').hasMatch(tenDigit)) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Please enter a valid 10-digit Indian SIM number starting with 6, 7, 8, or 9.',
+      );
+      return false;
+    }
+
+    final formattedPhone = '+91 $tenDigit';
+    final user = UserModel(
+      id: 'usr-${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim(),
+      phone: formattedPhone,
+      bloodGroup: bloodGroup ?? 'O+',
+      emergencyNotes: emergencyNotes ?? '',
+    );
+
+    // Save locally
+    await _storageService.saveUser(user);
+    await _storageService.saveRegisteredUserByPhone(user);
+    await _storageService.saveLastRegisteredPhone(tenDigit);
+    await _storageService.saveToken('token_$tenDigit');
+
+    // Sync with backend API
+    try {
+      final res = await _apiClient.registerUser(
+        name: user.name,
+        phone: tenDigit,
+        bloodGroup: user.bloodGroup,
+        emergencyNotes: user.emergencyNotes,
+      );
+      if (res['token'] != null) {
+        await _storageService.saveToken(res['token'].toString());
+      }
+    } catch (_) {}
+
+    state = state.copyWith(
+      user: user,
+      currentPhone: formattedPhone,
+      isLoading: false,
+      errorMessage: null,
+    );
+    return true;
+  }
+
   /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)
   Future<bool> signInWithPhoneNumber(String phone, {String? name}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
