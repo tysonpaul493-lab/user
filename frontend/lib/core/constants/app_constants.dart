@@ -4,19 +4,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 const String _kDefaultLiveWebBackend = 'https://bottle-equilibrium-vcr-introductory.trycloudflare.com/api';
 
 String get _detectedUserHost {
-  if (kIsWeb) {
-    if (AppConstants.configuredApiUrl.isNotEmpty) {
-      return AppConstants.configuredApiUrl;
-    }
-    return _kDefaultLiveWebBackend;
+  if (AppConstants.configuredApiUrl.isNotEmpty) {
+    return AppConstants.configuredApiUrl;
   }
-  try {
-    // Primary default for standalone Android APK on LAN Wi-Fi
-    if (Platform.isAndroid) return AppConstants.fallbackLanHost;
-    return 'localhost';
-  } catch (_) {
-    return 'localhost';
-  }
+  // Primary default for mobile and web: Live Cloudflare Dispatch Gateway
+  return _kDefaultLiveWebBackend;
 }
 
 class AppConstants {
@@ -75,6 +67,7 @@ class AppConstants {
     }
 
     addHost(_runtimeFallbackHost);
+    addHost(_kDefaultLiveWebBackend);
     addHost(fallbackLanHost);
     try {
       if (Platform.isAndroid) {
@@ -176,23 +169,21 @@ class AppConstants {
 
   // Dispatch Backend Defaults
   static String get defaultBaseUrl {
-    if (kIsWeb) {
-      if (_customFullBaseUrl != null &&
-          _customFullBaseUrl!.isNotEmpty &&
-          !_customFullBaseUrl!.contains('localhost') &&
-          !_customFullBaseUrl!.contains('127.0.0.1')) {
-        return _customFullBaseUrl!;
-      }
-      if (configuredApiUrl.isNotEmpty &&
-          !configuredApiUrl.contains('localhost') &&
-          !configuredApiUrl.contains('127.0.0.1')) {
-        return configuredApiUrl;
-      }
-      return _kDefaultLiveWebBackend;
+    if (_customFullBaseUrl != null &&
+        _customFullBaseUrl!.isNotEmpty &&
+        !_customFullBaseUrl!.contains('localhost') &&
+        !_customFullBaseUrl!.contains('127.0.0.1')) {
+      return _customFullBaseUrl!;
     }
-    return configuredApiUrl.isNotEmpty
-        ? configuredApiUrl
-        : (_customFullBaseUrl ?? defaultLocalBaseUrl);
+    if (configuredApiUrl.isNotEmpty &&
+        !configuredApiUrl.contains('localhost') &&
+        !configuredApiUrl.contains('127.0.0.1')) {
+      return configuredApiUrl;
+    }
+    if (_runtimeFallbackHost != null && _runtimeFallbackHost!.isNotEmpty) {
+      return baseUrlForHost(_runtimeFallbackHost!);
+    }
+    return _kDefaultLiveWebBackend;
   }
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
   static String get reverbHost => effectiveHost.contains('trycloudflare.com')
