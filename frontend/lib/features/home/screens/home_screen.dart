@@ -187,12 +187,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     }
 
     ref.listen<BookingState>(bookingProvider, (previous, next) {
-      if (previous == null ||
-          previous.currentLat != next.currentLat ||
-          previous.currentLng != next.currentLng) {
-        if (selectedHospital == null) {
+      final latDiff = previous == null ? 1.0 : (previous.currentLat - next.currentLat).abs();
+      final lngDiff = previous == null ? 1.0 : (previous.currentLng - next.currentLng).abs();
+      if (previous == null || latDiff > 0.0003 || lngDiff > 0.0003) {
+        if (selectedHospital == null && previous == null) {
           _safeMoveMap(LatLng(next.currentLat, next.currentLng));
-        } else {
+        } else if (selectedHospital != null) {
           ref
               .read(hospitalProvider.notifier)
               .refreshRoadRoute(LatLng(next.currentLat, next.currentLng));

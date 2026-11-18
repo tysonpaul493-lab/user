@@ -147,10 +147,12 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
       return;
     }
 
-    if (widget.center != oldWidget.center) {
+    final latDelta = (widget.center.latitude - oldWidget.center.latitude).abs();
+    final lngDelta = (widget.center.longitude - oldWidget.center.longitude).abs();
+    if (latDelta > 0.0002 || lngDelta > 0.0002) {
       try {
         final camera = _effectiveMapController.camera;
-        _effectiveMapController.moveAndRotate(widget.center, camera.zoom, camera.rotation);
+        _effectiveMapController.move(widget.center, camera.zoom);
       } catch (_) {}
     }
   }
@@ -277,9 +279,9 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
                   InteractiveFlag.doubleTapDragZoom |
                   InteractiveFlag.scrollWheelZoom |
                   InteractiveFlag.pinchMove,
-              pinchZoomThreshold: 0.05,
-              pinchMoveThreshold: 6.0,
-              scrollWheelVelocity: 0.0035,
+              pinchZoomThreshold: 0.08,
+              pinchMoveThreshold: 8.0,
+              scrollWheelVelocity: 0.005,
               enableMultiFingerGestureRace: false,
             ),
           ),
@@ -290,9 +292,9 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
               userAgentPackageName: 'com.liferoute.emergency',
               maxZoom: 19.5,
               maxNativeZoom: 18,
-              keepBuffer: 6,
+              keepBuffer: 3,
               panBuffer: 1,
-              tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 100)),
+              tileDisplay: const TileDisplay.fadeIn(duration: Duration(milliseconds: 60)),
               evictErrorTileStrategy: EvictErrorTileStrategy.none,
             ),
 

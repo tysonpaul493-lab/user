@@ -153,12 +153,13 @@ void main() {
         final phoneField = find.byType(TextField).last;
         expect(tester.widget<TextField>(nameField).controller?.text, isEmpty);
         expect(tester.widget<TextField>(phoneField).controller?.text, isEmpty);
-        expect(find.text('Enter LifeRoute Emergency'), findsOneWidget);
+        final loginBtn = find.text('Verify & Sign In');
+        expect(loginBtn, findsOneWidget);
 
         // 4c. Validate short phone number rejection
         await tester.enterText(phoneField, '123');
-        await tester.ensureVisible(find.text('Enter LifeRoute Emergency'));
-        await tester.tap(find.text('Enter LifeRoute Emergency'));
+        await tester.ensureVisible(loginBtn);
+        await tester.tap(loginBtn);
         await tester.pumpAndSettle();
         expect(
           find.text('Please enter a valid 10-digit mobile number'),
@@ -167,12 +168,12 @@ void main() {
 
         // 4d. Validate non-Indian SIM prefix rejection
         await tester.enterText(phoneField, '1234567890');
-        await tester.ensureVisible(find.text('Enter LifeRoute Emergency'));
-        await tester.tap(find.text('Enter LifeRoute Emergency'));
+        await tester.ensureVisible(loginBtn);
+        await tester.tap(loginBtn);
         await tester.pumpAndSettle();
         expect(
           find.text(
-            'Invalid SIM mobile number. Indian mobile numbers must start with 6, 7, 8, or 9.',
+            'Invalid mobile number. Indian mobile numbers must start with 6, 7, 8, or 9.',
           ),
           findsOneWidget,
         );
