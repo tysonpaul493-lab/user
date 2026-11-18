@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-const String _kDefaultLiveWebBackend = 'https://vocabulary-banner-ram-sons.trycloudflare.com/api';
+const String _kDefaultLiveWebBackend = 'https://bottle-equilibrium-vcr-introductory.trycloudflare.com/api';
 
 String get _detectedUserHost {
   if (kIsWeb) {
@@ -196,7 +196,7 @@ class AppConstants {
   }
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
   static String get reverbHost => effectiveHost.contains('trycloudflare.com')
-      ? 'peoples-membership-acrobat-nation.trycloudflare.com'
+      ? 'campus-virgin-plants-termination.trycloudflare.com'
       : effectiveHost;
   static int get reverbPort => reverbHost.contains('trycloudflare.com') ? 443 : 8080;
   static bool get reverbUseTls => reverbHost.contains('trycloudflare.com') || defaultBaseUrl.startsWith('https://');
