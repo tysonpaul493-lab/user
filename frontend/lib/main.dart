@@ -44,20 +44,20 @@ void main() async {
       overrides: [
         storageServiceProvider.overrideWithValue(storageService),
       ],
-      child: const LifeRouteApp(),
+      child: const A2IApp(),
     ),
   );
 }
 
-class LifeRouteApp extends ConsumerWidget {
-  const LifeRouteApp({super.key});
+class A2IApp extends ConsumerWidget {
+  const A2IApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
 
     return MaterialApp(
-      title: AppConstants.appName,
+      title: 'A2I',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       locale: Locale(authState.selectedLocale),

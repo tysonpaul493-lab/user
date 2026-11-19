@@ -499,7 +499,7 @@ class ApiClient {
         url,
         options: Options(
           headers: {
-            'User-Agent': 'LifeRouteEmergencyApp/1.0 (contact@liferoute.com)',
+            'User-Agent': 'A2IEmergencyApp/1.0 (contact@a2i.org)',
           },
           sendTimeout: const Duration(seconds: 4),
           receiveTimeout: const Duration(seconds: 5),

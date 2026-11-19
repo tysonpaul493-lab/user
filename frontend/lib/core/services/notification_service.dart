@@ -26,7 +26,7 @@ class NotificationService {
   static List<EmergencyNotification> get notifications => List.unmodifiable(_notifications);
 
   static const String _alertChannelId = 'emergency_alerts_channel';
-  static const String _alertChannelName = 'LifeRoute Emergency Alerts';
+  static const String _alertChannelName = 'A2I Emergency Alerts';
   static const String _alertChannelDesc = 'Real-time notifications for ambulance dispatch, arrival, and hospital transport';
 
   static const String _chatChannelId = 'driver_chat_channel';
@@ -113,7 +113,7 @@ class NotificationService {
         enableVibration: true,
         fullScreenIntent: true,
         category: AndroidNotificationCategory.alarm,
-        ticker: '🚨 LifeRoute Emergency Alert',
+        ticker: '🚨 A2I Emergency Alert',
       );
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

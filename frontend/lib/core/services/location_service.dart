@@ -32,7 +32,7 @@ class LocationService {
       connectTimeout: const Duration(seconds: 6),
       receiveTimeout: const Duration(seconds: 6),
       headers: {
-        'User-Agent': 'LifeRouteEmergency/1.0 (Android Emergency App)',
+        'User-Agent': 'A2IEmergency/1.0 (Android Emergency App)',
         'Accept': 'application/json',
       },
     ),
@@ -336,7 +336,7 @@ class LocationService {
       final response = await _dio.get(
         url,
         options: Options(
-          headers: {'User-Agent': 'LifeRouteEmergencyApp/1.0 (contact@liferoute.com)'},
+          headers: {'User-Agent': 'A2IEmergencyApp/1.0 (contact@a2i.org)'},
           receiveTimeout: const Duration(seconds: 5),
           sendTimeout: const Duration(seconds: 4),
         ),

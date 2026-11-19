@@ -306,7 +306,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
         NotificationService.showEmergencyNotification(
           id: notifId + 5,
           title: '✅ Emergency Trip Completed',
-          body: 'Patient safely admitted. Thank you for using LifeRoute Emergency.',
+          body: 'Patient safely admitted. Thank you for using A2I Emergency Service.',
           payload: booking.id,
         );
         break;

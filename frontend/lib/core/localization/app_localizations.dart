@@ -2,7 +2,7 @@ class AppLocalizations {
   static const Map<String, Map<String, String>> _localizedValues = {
     'en': {
       // Common
-      'appName': 'LifeRoute Emergency',
+      'appName': 'A2I',
       'cancel': 'Cancel',
       'save': 'Save',
       'close': 'Close',

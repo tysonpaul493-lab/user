@@ -77,7 +77,7 @@ class SmsOtpService {
             return SmsSendResult(
               isRealSmsSent: true,
               message: 'SMS verification code delivered to $tenDigitPhone.',
-              provider: 'LifeRoute SMS Gateway',
+              provider: 'A2I SMS Gateway',
             );
           } else {
             final errorMsg = response.data['message']?.toString() ?? 'Gateway error';
@@ -99,7 +99,7 @@ class SmsOtpService {
             return SmsSendResult(
               isRealSmsSent: true,
               message: 'SMS verification code delivered to $tenDigitPhone.',
-              provider: 'LifeRoute SMS Gateway',
+              provider: 'A2I SMS Gateway',
             );
           }
         } catch (e) {
@@ -116,7 +116,7 @@ class SmsOtpService {
     return SmsSendResult(
       isRealSmsSent: false,
       message: 'Verification code ready for $tenDigitPhone.',
-      provider: 'LifeRoute Local Security',
+      provider: 'A2I Local Security',
     );
   }
 }

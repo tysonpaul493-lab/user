@@ -289,7 +289,7 @@ class _CustomMapWidgetState extends State<CustomMapWidget> {
             // Standard OpenStreetMap daylight roadmap tile layer with native memory caching
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.liferoute.emergency',
+              userAgentPackageName: 'org.a2i.emergency',
               maxZoom: 19.5,
               maxNativeZoom: 18,
               keepBuffer: 3,

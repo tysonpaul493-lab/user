@@ -9,7 +9,7 @@ class RouteService {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {
-        if (!kIsWeb) 'User-Agent': 'LifeRouteEmergency/1.0 (Android Emergency Routing)',
+        if (!kIsWeb) 'User-Agent': 'A2IEmergency/1.0 (Android Emergency Routing)',
         'Accept': 'application/json',
       },
     ),

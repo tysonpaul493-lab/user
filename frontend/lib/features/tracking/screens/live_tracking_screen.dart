@@ -962,7 +962,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
         '🚨 Emergency Dispatch Tracking 🚨\n'
         'An emergency ambulance ($refNum) is en route to $pickup.\n'
         'Destination Hospital: $hospital.\n'
-        'Track live progress: https://liferoute.app/track/$refNum';
+        'Track live progress: https://a2i.org/track/$refNum';
 
     final uri = Uri.parse(
       'whatsapp://send?text=${Uri.encodeComponent(shareText)}',

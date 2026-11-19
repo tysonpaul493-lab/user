@@ -153,7 +153,7 @@ class AppConstants {
     return 'http://$host:8000/api';
   }
 
-  static const String appName = 'LifeRoute Emergency';
+  static const String appName = 'A2I';
   static const String appVersion = '1.0.0';
 
   // Emergency Hotlines (Prompt requirement: 108 India)
