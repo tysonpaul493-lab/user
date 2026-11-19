@@ -13,59 +13,38 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
+class _SplashScreenState extends ConsumerState<SplashScreen> {
+  Timer? _navTimer;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
+    // Prompt, clean transition to HomeScreen or LoginScreen without bouncy animations
+    _navTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      final storage = ref.read(storageServiceProvider);
+      final savedUser = storage.getUser();
+      final bool isAlreadyRegistered = savedUser != null && savedUser.phone.isNotEmpty;
 
-    _scaleAnimation = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOutBack,
-    );
+      final targetScreen = isAlreadyRegistered ? const HomeScreen() : const LoginScreen();
 
-    _fadeAnimation = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeIn,
-    );
-
-    _animController.forward();
-
-    // After 1.5 seconds, smoothly transition to HomeScreen if user is already registered, or LoginScreen otherwise
-    Timer(const Duration(milliseconds: 1500), () {
       if (mounted) {
-        final storage = ref.read(storageServiceProvider);
-        final savedUser = storage.getUser();
-        final bool isAlreadyRegistered = savedUser != null && savedUser.phone.isNotEmpty;
-
-        final targetScreen = isAlreadyRegistered ? const HomeScreen() : const LoginScreen();
-
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            PageRouteBuilder(
-              transitionDuration: const Duration(milliseconds: 500),
-              pageBuilder: (context, animation, secondaryAnimation) => targetScreen,
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            ),
-          );
-        }
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 400),
+            pageBuilder: (context, animation, secondaryAnimation) => targetScreen,
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+          ),
+        );
       }
     });
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _navTimer?.cancel();
     super.dispose();
   }
 
@@ -100,50 +79,47 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             ),
           ),
           Center(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.12),
-                            blurRadius: 30,
-                            spreadRadius: 4,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: AppColors.primaryRed.withValues(alpha: 0.2),
-                          width: 2.5,
+                  // Official Trust Logo Emblem - Clean Static Display (Zero Animation / Zero LifeRoute Old Badges)
+                  Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 30,
+                          spreadRadius: 4,
+                          offset: const Offset(0, 8),
                         ),
+                      ],
+                      border: Border.all(
+                        color: AppColors.primaryRed.withValues(alpha: 0.2),
+                        width: 2.5,
                       ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/app_logo.png',
-                          width: 140,
-                          height: 140,
-                          fit: BoxFit.cover,
-                        ),
+                    ),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 140,
+                        height: 140,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    padding: EdgeInsets.symmetric(horizontal: 24),
                     child: Text(
                       'ஆல் இந்தியா தமிழ் அனைத்து அறக்கட்டளை',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 21,
                         fontWeight: FontWeight.w900,
                         color: AppColors.textPrimary,
                         letterSpacing: 0.3,
@@ -151,18 +127,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   const Text(
-                    'தமிழ்நாடு அவசர ஊர்தி சேவை',
+                    'தமிழ்நாடு அவசர ஊர்தி சேவை • நேரடி கண்காணிப்பு',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: AppColors.primaryRed,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.4,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                     decoration: BoxDecoration(
@@ -194,16 +170,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             child: Column(
               children: [
                 SizedBox(
-                  width: 32,
-                  height: 32,
+                  width: 28,
+                  height: 28,
                   child: CircularProgressIndicator(
-                    strokeWidth: 3,
+                    strokeWidth: 2.5,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       AppColors.primaryRed.withValues(alpha: 0.8),
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 const Text(
                   'Connecting to Live Emergency Response Network...',
                   style: TextStyle(

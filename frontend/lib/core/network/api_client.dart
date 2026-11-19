@@ -69,8 +69,7 @@ class ApiClient {
     String? excludeHost,
     Duration timeout = const Duration(milliseconds: 2500),
   }) async {
-    if (kIsWeb ||
-        AppConstants.hasCustomServerHost ||
+    if (AppConstants.hasCustomServerHost ||
         AppConstants.configuredApiUrl.isNotEmpty) {
       return AppConstants.effectiveHost;
     }
@@ -125,7 +124,6 @@ class ApiClient {
           e.error is SocketException;
 
       if (isConnectivityFailure &&
-          !kIsWeb &&
           !AppConstants.hasCustomServerHost &&
           AppConstants.configuredApiUrl.isEmpty) {
         final failedHost = AppConstants.effectiveHost;

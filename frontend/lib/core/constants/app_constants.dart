@@ -29,30 +29,29 @@ class AppConstants {
 
   /// Effective server IP/hostname for both REST API and live WebSocket dispatch
   static String get effectiveHost {
+    if (_customServerHost != null && _customServerHost!.isNotEmpty) {
+      return _customServerHost!;
+    }
+    if (_runtimeFallbackHost != null && _runtimeFallbackHost!.isNotEmpty) {
+      return _runtimeFallbackHost!;
+    }
     if (kIsWeb) {
-      if (_customServerHost != null &&
-          _customServerHost!.isNotEmpty &&
-          !_customServerHost!.contains('localhost') &&
-          !_customServerHost!.contains('127.0.0.1')) {
-        return _customServerHost!;
-      }
+      try {
+        final webHost = Uri.base.host.trim();
+        if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {
+          return webHost;
+        }
+      } catch (_) {}
       return _kDefaultLiveWebBackend;
     }
-    return _customServerHost ?? _runtimeFallbackHost ?? _detectedUserHost;
+    return _detectedUserHost;
   }
 
   static bool get hasCustomServerHost =>
-      _customServerHost != null &&
-      (!kIsWeb || (!_customServerHost!.contains('localhost') && !_customServerHost!.contains('127.0.0.1')));
+      _customServerHost != null && _customServerHost!.isNotEmpty;
 
   /// Ordered unique list of candidate backend hosts for automatic connection resolution.
   static List<String> get candidateHosts {
-    if (kIsWeb) {
-      return [
-        if (hasCustomServerHost) _customServerHost! else _kDefaultLiveWebBackend,
-      ];
-    }
-
     final hosts = <String>[];
     void addHost(String? value) {
       final cleaned = value?.trim() ?? '';
@@ -67,15 +66,27 @@ class AppConstants {
     }
 
     addHost(_runtimeFallbackHost);
-    addHost(_kDefaultLiveWebBackend);
+
+    if (kIsWeb) {
+      try {
+        final webHost = Uri.base.host.trim();
+        if (webHost.isNotEmpty) {
+          addHost(webHost);
+        }
+      } catch (_) {}
+    }
+
+    addHost('localhost');
+    addHost('127.0.0.1');
     addHost(fallbackLanHost);
+    addHost(_kDefaultLiveWebBackend);
+
     try {
       if (Platform.isAndroid) {
         addHost('10.0.2.2');
-        addHost('127.0.0.1');
       }
     } catch (_) {}
-    addHost('localhost');
+
     return hosts;
   }
 
@@ -127,34 +138,17 @@ class AppConstants {
 
   /// Build base API URL for an explicit host
   static String baseUrlForHost(String host) {
-    if (kIsWeb) {
-      if (_customFullBaseUrl != null &&
-          _customFullBaseUrl!.isNotEmpty &&
-          !_customFullBaseUrl!.contains('localhost') &&
-          !_customFullBaseUrl!.contains('127.0.0.1')) {
-        return _customFullBaseUrl!;
-      }
-      if (host.startsWith('http://') || host.startsWith('https://')) {
-        if (!host.contains('localhost') && !host.contains('127.0.0.1')) {
-          var url = host;
-          if (url.endsWith('/')) url = url.substring(0, url.length - 1);
-          if (!url.endsWith('/api') && !url.endsWith('/api/v1')) url = '$url/api';
-          return url;
-        }
-      }
-      return _kDefaultLiveWebBackend;
-    }
     if (_customFullBaseUrl != null && _customFullBaseUrl!.isNotEmpty) {
       return _customFullBaseUrl!;
-    }
-    if (configuredApiUrl.isNotEmpty) {
-      return configuredApiUrl;
     }
     if (host.startsWith('http://') || host.startsWith('https://')) {
       var url = host;
       if (url.endsWith('/')) url = url.substring(0, url.length - 1);
       if (!url.endsWith('/api') && !url.endsWith('/api/v1')) url = '$url/api';
       return url;
+    }
+    if (configuredApiUrl.isNotEmpty) {
+      return configuredApiUrl;
     }
     return 'http://$host:8000/api';
   }
@@ -169,19 +163,25 @@ class AppConstants {
 
   // Dispatch Backend Defaults
   static String get defaultBaseUrl {
-    if (_customFullBaseUrl != null &&
-        _customFullBaseUrl!.isNotEmpty &&
-        !_customFullBaseUrl!.contains('localhost') &&
-        !_customFullBaseUrl!.contains('127.0.0.1')) {
+    if (_customFullBaseUrl != null && _customFullBaseUrl!.isNotEmpty) {
       return _customFullBaseUrl!;
     }
-    if (configuredApiUrl.isNotEmpty &&
-        !configuredApiUrl.contains('localhost') &&
-        !configuredApiUrl.contains('127.0.0.1')) {
+    if (_customServerHost != null && _customServerHost!.isNotEmpty) {
+      return baseUrlForHost(_customServerHost!);
+    }
+    if (configuredApiUrl.isNotEmpty) {
       return configuredApiUrl;
     }
     if (_runtimeFallbackHost != null && _runtimeFallbackHost!.isNotEmpty) {
       return baseUrlForHost(_runtimeFallbackHost!);
+    }
+    if (kIsWeb) {
+      try {
+        final webHost = Uri.base.host.trim();
+        if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {
+          return 'http://$webHost:8000/api';
+        }
+      } catch (_) {}
     }
     return _kDefaultLiveWebBackend;
   }

@@ -49,14 +49,6 @@
         }
       });
     }
-    try {
-      for (var k in localStorage) {
-        var v = localStorage.getItem(k);
-        if (typeof v === 'string' && (v.includes('localhost') || v.includes('127.0.0.1'))) {
-          localStorage.removeItem(k);
-        }
-      }
-    } catch (e) {}
   </script>
 </head>
 <body>

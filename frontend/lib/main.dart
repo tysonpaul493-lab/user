@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/constants/app_constants.dart';
@@ -13,7 +14,17 @@ void main() async {
 
   // Initialize secure local storage & shared preferences
   final storageService = await StorageService.init();
-  AppConstants.setServerHost(storageService.getServerHost());
+  final savedHost = storageService.getServerHost();
+  if (savedHost != null && savedHost.isNotEmpty) {
+    AppConstants.setServerHost(savedHost);
+  } else if (kIsWeb) {
+    try {
+      final webHost = Uri.base.host.trim();
+      if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {
+        AppConstants.setRuntimeFallbackHost(webHost);
+      }
+    } catch (_) {}
+  }
 
   // Fast auto-resolution of server host (LAN Wi-Fi, USB, emulator)
   if (!AppConstants.hasCustomServerHost) {
