@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-const String _kDefaultLiveWebBackend = 'https://posts-duration-leisure-notebook.trycloudflare.com/api';
+const String _kDefaultLiveWebBackend = 'https://activated-concepts-busy-syndication.trycloudflare.com/api';
 
 String get _detectedUserHost {
   if (AppConstants.configuredApiUrl.isNotEmpty) {
@@ -50,6 +50,32 @@ class AppConstants {
   static bool get hasCustomServerHost =>
       _customServerHost != null && _customServerHost!.isNotEmpty;
 
+  /// User-friendly label of the current server endpoint for notifications and error messages
+  static String get displayServerEndpoint {
+    if (_customFullBaseUrl != null && _customFullBaseUrl!.isNotEmpty) {
+      return _customFullBaseUrl!.replaceAll(RegExp(r'^https?://'), '');
+    }
+    if (_customServerHost != null && _customServerHost!.isNotEmpty) {
+      return '$_customServerHost:8000';
+    }
+    if (_runtimeFallbackHost != null && _runtimeFallbackHost!.isNotEmpty) {
+      return '$_runtimeFallbackHost:8000';
+    }
+    if (kIsWeb) {
+      try {
+        final webHost = Uri.base.host.trim();
+        if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {
+          return '$webHost:8000';
+        }
+      } catch (_) {}
+      return 'Cloudflare Dispatch Gateway';
+    }
+    if (effectiveHost.startsWith('http://') || effectiveHost.startsWith('https://')) {
+      return effectiveHost.replaceAll(RegExp(r'^https?://'), '');
+    }
+    return '$effectiveHost:8000';
+  }
+
   /// Ordered unique list of candidate backend hosts for automatic connection resolution.
   static List<String> get candidateHosts {
     final hosts = <String>[];
@@ -96,6 +122,8 @@ class AppConstants {
     _runtimeFallbackHost = trimmed.isEmpty ? null : trimmed;
   }
 
+  static String? get customFullBaseUrl => _customFullBaseUrl;
+
   /// Configure custom server host/IP (or null/empty to revert to automatic detection)
   static void setServerHost(String? rawHost) {
     final trimmed = rawHost?.trim() ?? '';
@@ -126,6 +154,29 @@ class AppConstants {
       return;
     }
 
+    // Auto-detect cloud tunnel domains entered without scheme
+    if (trimmed.contains('trycloudflare.com') ||
+        trimmed.contains('ngrok') ||
+        (trimmed.contains('.') &&
+            !RegExp(r'^\d+\.\d+\.\d+\.\d+').hasMatch(trimmed) &&
+            !trimmed.contains(':8000'))) {
+      var url = 'https://$trimmed';
+      if (url.endsWith('/')) {
+        url = url.substring(0, url.length - 1);
+      }
+      if (!url.endsWith('/api') && !url.endsWith('/api/v1')) {
+        url = '$url/api';
+      }
+      _customFullBaseUrl = url;
+      var cleaned = trimmed.split('/').first.trim();
+      if (cleaned.contains(':')) {
+        cleaned = cleaned.split(':').first.trim();
+      }
+      _customServerHost = cleaned.isEmpty ? null : cleaned;
+      _runtimeFallbackHost = null;
+      return;
+    }
+
     var cleaned = trimmed.replaceAll(RegExp(r'^https?://', caseSensitive: false), '');
     cleaned = cleaned.split('/').first.trim();
     if (cleaned.contains(':')) {
@@ -138,7 +189,9 @@ class AppConstants {
 
   /// Build base API URL for an explicit host
   static String baseUrlForHost(String host) {
-    if (_customFullBaseUrl != null && _customFullBaseUrl!.isNotEmpty) {
+    if (_customFullBaseUrl != null &&
+        _customFullBaseUrl!.isNotEmpty &&
+        (host == _customServerHost || host == effectiveHost)) {
       return _customFullBaseUrl!;
     }
     if (host.startsWith('http://') || host.startsWith('https://')) {
@@ -146,6 +199,9 @@ class AppConstants {
       if (url.endsWith('/')) url = url.substring(0, url.length - 1);
       if (!url.endsWith('/api') && !url.endsWith('/api/v1')) url = '$url/api';
       return url;
+    }
+    if (host.contains('trycloudflare.com') || host.contains('ngrok')) {
+      return 'https://$host/api';
     }
     if (configuredApiUrl.isNotEmpty) {
       return configuredApiUrl;
@@ -187,7 +243,7 @@ class AppConstants {
   }
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
   static String get reverbHost => effectiveHost.contains('trycloudflare.com')
-      ? 'reynolds-geo-nature-restaurants.trycloudflare.com'
+      ? 'realize-glucose-fired-affiliated.trycloudflare.com'
       : effectiveHost;
   static int get reverbPort => reverbHost.contains('trycloudflare.com') ? 443 : 8080;
   static bool get reverbUseTls => reverbHost.contains('trycloudflare.com') || defaultBaseUrl.startsWith('https://');

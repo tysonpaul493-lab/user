@@ -11,7 +11,9 @@ Future<void> showUserServerSettingsDialog(BuildContext context, WidgetRef ref) a
   final storage = ref.read(storageServiceProvider);
   final stored = storage.getServerHost();
   final controller = TextEditingController(
-    text: (stored != null && stored.isNotEmpty) ? stored : AppConstants.effectiveHost,
+    text: (stored != null && stored.isNotEmpty)
+        ? stored
+        : (AppConstants.customFullBaseUrl ?? AppConstants.defaultBaseUrl),
   );
 
   bool isTesting = false;
@@ -131,10 +133,10 @@ Future<void> showUserServerSettingsDialog(BuildContext context, WidgetRef ref) a
                       await storage.setServerHost(null);
                       ref.read(apiClientProvider).refreshBaseUrl();
                       ref.read(reverbServiceProvider).reconnectIfActive();
-                      controller.text = AppConstants.effectiveHost;
+                      controller.text = AppConstants.defaultBaseUrl;
                       setState(() {
                         isHealthy = null;
-                        statusText = 'Reset to automatic host (${AppConstants.effectiveHost}).';
+                        statusText = 'Reset to automatic host (${AppConstants.displayServerEndpoint}).';
                       });
                     },
               child: const Text(
@@ -157,7 +159,9 @@ Future<void> showUserServerSettingsDialog(BuildContext context, WidgetRef ref) a
                       final raw = controller.text.trim();
                       AppConstants.setServerHost(raw);
                       await storage.setServerHost(
-                        AppConstants.hasCustomServerHost ? AppConstants.effectiveHost : null,
+                        AppConstants.hasCustomServerHost
+                            ? (AppConstants.customFullBaseUrl ?? raw)
+                            : null,
                       );
                       final api = ref.read(apiClientProvider);
                       api.refreshBaseUrl();
@@ -168,8 +172,8 @@ Future<void> showUserServerSettingsDialog(BuildContext context, WidgetRef ref) a
                         isTesting = false;
                         isHealthy = ok;
                         statusText = ok
-                            ? 'Connected to Dispatch Server (${AppConstants.effectiveHost})'
-                            : 'Saved host (${AppConstants.effectiveHost}), but server did not respond on port 8000.';
+                            ? 'Connected to Dispatch Server (${AppConstants.displayServerEndpoint})'
+                            : 'Saved host (${AppConstants.displayServerEndpoint}), but server did not respond at ${AppConstants.defaultBaseUrl}.';
                       });
                     },
               style: ElevatedButton.styleFrom(
