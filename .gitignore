@@ -5,6 +5,12 @@
 *.log
 .phpunit.result.cache
 
+# Prevent node_modules permanently
+node_modules/
+**/node_modules/
+node_modules
+*/node_modules
+
 # Backend
 backend/vendor/
 backend/node_modules/
