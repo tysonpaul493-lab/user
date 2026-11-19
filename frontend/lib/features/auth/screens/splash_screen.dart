@@ -108,73 +108,70 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   ScaleTransition(
                     scale: _scaleAnimation,
                     child: Container(
-                      width: 120,
-                      height: 120,
+                      width: 140,
+                      height: 140,
                       decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
                         shape: BoxShape.circle,
+                        color: Colors.white,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryRed.withValues(alpha: 0.45),
-                            blurRadius: 36,
-                            spreadRadius: 6,
-                            offset: const Offset(0, 10),
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 30,
+                            spreadRadius: 4,
+                            offset: const Offset(0, 8),
                           ),
                         ],
+                        border: Border.all(
+                          color: AppColors.primaryRed.withValues(alpha: 0.2),
+                          width: 2.5,
+                        ),
                       ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 104,
-                            height: 104,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.35),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.local_hospital_rounded,
-                            size: 64,
-                            color: Colors.white,
-                          ),
-                        ],
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/app_logo.png',
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Life',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.textPrimary,
-                          letterSpacing: 0.5,
-                        ),
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'ஆல் இந்தியா தமிழ் அனைத்து அறக்கட்டளை',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                        letterSpacing: 0.3,
+                        height: 1.3,
                       ),
-                      Text(
-                        'Route',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primaryRed,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'தமிழ்நாடு அவசர ஊர்தி சேவை',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primaryRed,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                     decoration: BoxDecoration(
                       color: AppColors.primaryRed.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primaryRed.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
                     ),
                     child: const Text(
                       'EMERGENCY AMBULANCE DISPATCH • 108',

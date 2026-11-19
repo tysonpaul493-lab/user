@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/i18n/app_strings.dart';
 import '../../../shared/widgets/server_settings_dialog.dart';
 import '../providers/auth_provider.dart';
 import '../../home/screens/home_screen.dart';
@@ -199,7 +198,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final strings = AppStrings(Locale(authState.selectedLocale));
     final isTamil = authState.selectedLocale == 'ta';
 
     return Scaffold(
@@ -230,42 +228,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Emergency Brand Badge
+              // Trust Official Logo Brand Badge
               Center(
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
                     shape: BoxShape.circle,
-                    boxShadow: AppColors.redGlowShadow,
-                  ),
-                  child: const Icon(
-                    Icons.local_hospital_rounded,
                     color: Colors.white,
-                    size: 42,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: AppColors.primaryRed.withValues(alpha: 0.2),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/app_logo.png',
+                      width: 96,
+                      height: 96,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
 
               Text(
-                strings.get('appName'),
+                isTamil ? 'ஆல் இந்தியா தமிழ் அனைத்து அறக்கட்டளை' : 'All India Tamil All Trust',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w900,
                   color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
+                  letterSpacing: -0.3,
+                  height: 1.25,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 isTamil
-                    ? 'துரித அவசர மருத்துவ ஊர்தி சேவை மற்றும் நேரடி கண்காணிப்பு'
-                    : 'Rapid Emergency Medical Response & Real-Time Tracking',
+                    ? 'தமிழ்நாடு அவசர ஊர்தி சேவை • நேரடி கண்காணிப்பு'
+                    : 'Tamil Nadu Emergency Medical Response & Tracking',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primaryRed,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -670,7 +687,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              isTamil ? 'புதிய பயனரா?' : 'New to LifeRoute? ',
+              isTamil ? 'புதிய பயனரா?' : 'New user? ',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             GestureDetector(

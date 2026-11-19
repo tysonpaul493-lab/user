@@ -52,23 +52,41 @@ class HeaderLocationPill extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // User Initial Avatar Circle
+                  // Trust Logo Avatar Circle
                   Container(
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.25),
+                      color: Colors.white,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/images/app_logo.png',
+                            width: 38,
+                            height: 38,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Opacity(
+                          opacity: 0.0,
+                          child: Text(
+                            initial,
+                            style: const TextStyle(fontSize: 1),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 10),
