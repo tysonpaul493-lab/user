@@ -4,6 +4,9 @@
   "private": true,
   "description": "LifeRoute Emergency User Application",
   "scripts": {
+    "dev": "node serve.js",
+    "start": "node serve.js",
+    "serve": "node serve.js",
     "build": "echo Precompiled Flutter Web distribution ready"
   }
 }
