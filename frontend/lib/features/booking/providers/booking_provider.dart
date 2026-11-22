@@ -570,62 +570,23 @@ class BookingNotifier extends StateNotifier<BookingState> {
         _startActiveBookingPoller(booking.id);
         return true;
       } else {
-        debugPrint('⚠️ [BookingProvider] Non-success response from server in triggerInstantSos: $res. Using resilient fallback.');
-        final bId = 'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
-        final fallbackBooking = BookingModel(
-          id: bId,
-          referenceNumber: '#LR-$bId',
-          status: BookingStatus.findingAmbulance,
-          userId: (bookingData['user_id'] ?? 'user_local').toString(),
-          pickupLat: (bookingData['pickup_lat'] as num?)?.toDouble() ?? AppConstants.defaultLat,
-          pickupLng: (bookingData['pickup_lng'] as num?)?.toDouble() ?? AppConstants.defaultLng,
-          pickupAddress: bookingData['pickup_address']?.toString() ?? AppConstants.defaultLocationName,
-          callbackPhone: bookingData['callback_phone']?.toString() ?? '',
-          patientName: bookingData['patient_name']?.toString() ?? 'Emergency Caller',
-          emergencyCategory: bookingData['emergency_category']?.toString() ?? 'General Emergency',
-          landmark: bookingData['landmark']?.toString(),
-          notes: bookingData['notes']?.toString(),
-          destinationHospital: destinationHospital,
-          createdAt: DateTime.now(),
-        );
-
+        final errorMsg = res['message']?.toString() ?? 'Failed to dispatch ambulance to emergency server.';
+        debugPrint('⚠️ [BookingProvider] Dispatch failure from server: $errorMsg');
         state = state.copyWith(
           isCreatingBooking: false,
-          isSearching: true,
-          activeBooking: fallbackBooking,
-          errorMessage: null,
+          isSearching: false,
+          errorMessage: errorMsg,
         );
-        _startActiveBookingPoller(fallbackBooking.id);
-        return true;
+        return false;
       }
     } catch (e) {
-      debugPrint('⚠️ [BookingProvider] Exception in triggerInstantSos: $e. Using resilient fallback.');
-      final bId = 'BK-${DateTime.now().millisecondsSinceEpoch % 100000}';
-      final fallbackBooking = BookingModel(
-        id: bId,
-        referenceNumber: '#LR-$bId',
-        status: BookingStatus.findingAmbulance,
-        userId: (bookingData['user_id'] ?? 'user_local').toString(),
-        pickupLat: (bookingData['pickup_lat'] as num?)?.toDouble() ?? AppConstants.defaultLat,
-        pickupLng: (bookingData['pickup_lng'] as num?)?.toDouble() ?? AppConstants.defaultLng,
-        pickupAddress: bookingData['pickup_address']?.toString() ?? AppConstants.defaultLocationName,
-        callbackPhone: bookingData['callback_phone']?.toString() ?? '',
-        patientName: bookingData['patient_name']?.toString() ?? 'Emergency Caller',
-        emergencyCategory: bookingData['emergency_category']?.toString() ?? 'General Emergency',
-        landmark: bookingData['landmark']?.toString(),
-        notes: bookingData['notes']?.toString(),
-        destinationHospital: destinationHospital,
-        createdAt: DateTime.now(),
-      );
-
+      debugPrint('⚠️ [BookingProvider] Exception in triggerInstantSos: $e');
       state = state.copyWith(
         isCreatingBooking: false,
-        isSearching: true,
-        activeBooking: fallbackBooking,
-        errorMessage: null,
+        isSearching: false,
+        errorMessage: 'Network error communicating with emergency dispatch: $e',
       );
-      _startActiveBookingPoller(fallbackBooking.id);
-      return true;
+      return false;
     }
   }
 
