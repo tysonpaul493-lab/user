@@ -16,8 +16,14 @@ void main() async {
   final storageService = await StorageService.init();
   final savedHost = storageService.getServerHost();
   if (savedHost != null && savedHost.isNotEmpty) {
-    AppConstants.setServerHost(savedHost);
-  } else if (kIsWeb) {
+    if (savedHost.contains('trycloudflare.com') &&
+        !savedHost.contains('festival-coaches-pending-article')) {
+      await storageService.setServerHost(null);
+    } else {
+      AppConstants.setServerHost(savedHost);
+    }
+  }
+  if (!AppConstants.hasCustomServerHost && kIsWeb) {
     try {
       final webHost = Uri.base.host.trim();
       if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {

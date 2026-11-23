@@ -71,7 +71,9 @@ class ApiClient {
   }) async {
     if (AppConstants.hasCustomServerHost ||
         AppConstants.configuredApiUrl.isNotEmpty) {
-      return AppConstants.effectiveHost;
+      if (excludeHost == null || excludeHost != AppConstants.effectiveHost) {
+        return AppConstants.effectiveHost;
+      }
     }
 
     final candidates = AppConstants.candidateHosts
@@ -123,12 +125,12 @@ class ApiClient {
           e.type == DioExceptionType.sendTimeout ||
           e.error is SocketException;
 
-      if (isConnectivityFailure &&
-          !AppConstants.hasCustomServerHost &&
-          AppConstants.configuredApiUrl.isEmpty) {
+      if (isConnectivityFailure) {
         final failedHost = AppConstants.effectiveHost;
         final nextHost = await resolveReachableHost(excludeHost: failedHost);
         if (nextHost != null && nextHost != failedHost) {
+          AppConstants.setServerHost(null);
+          AppConstants.setRuntimeFallbackHost(nextHost);
           refreshBaseUrl();
           onHostSwitched?.call();
           return await requestFn();
