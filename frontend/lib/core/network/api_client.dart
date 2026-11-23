@@ -174,14 +174,6 @@ class ApiClient {
         'message': 'OTP sent successfully to $phone.',
       };
     } catch (e) {
-      if (_storageService.isDemoMode()) {
-        return {
-          'status': 'success',
-          'message': 'Verification code generated for $phone.',
-          'otp_expires_in': 60,
-          'sms_dispatched': false,
-        };
-      }
       return {'status': 'error', 'message': e.toString()};
     }
   }
@@ -203,28 +195,6 @@ class ApiClient {
             ? e.response!.data['message'].toString()
             : 'Invalid or expired verification code.';
         return {'status': 'error', 'message': msg};
-      }
-      if (_storageService.isDemoMode() && otp.length == 6) {
-        final mockToken = 'token_${DateTime.now().millisecondsSinceEpoch}';
-        await _storageService.saveToken(mockToken);
-        final registered = _storageService.getRegisteredUserByPhone(phone);
-        final existingUser = _storageService.getUser();
-        final userObj = registered ?? existingUser;
-        return {
-          'status': 'success',
-          'token': mockToken,
-          'user': {
-            'id': userObj?.id.isNotEmpty == true
-                ? userObj!.id
-                : 'usr-${DateTime.now().millisecondsSinceEpoch}',
-            'name': (userObj != null && userObj.name.isNotEmpty)
-                ? userObj.name
-                : '',
-            'phone': phone,
-            'blood_group': userObj?.bloodGroup ?? '',
-            'emergency_notes': userObj?.emergencyNotes ?? '',
-          },
-        };
       }
       return {'status': 'error', 'message': e.toString()};
     } catch (e) {
@@ -382,21 +352,12 @@ class ApiClient {
       );
       return response.data;
     } catch (e) {
-      if (_storageService.isDemoMode()) {
-        return {
-          'status': 'success',
-          'message': 'Booking cancelled successfully.',
-        };
-      }
       return {'status': 'error', 'message': e.toString()};
     }
   }
 
   /// Update User Profile
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
-    if (_storageService.isDemoMode()) {
-      return {'status': 'success', 'user': data};
-    }
     try {
       final response = await _executeWithFailover(
         () => _dio.put('/user/profile', data: data),

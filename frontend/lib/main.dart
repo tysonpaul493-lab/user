@@ -16,8 +16,10 @@ void main() async {
   final storageService = await StorageService.init();
   final savedHost = storageService.getServerHost();
   if (savedHost != null && savedHost.isNotEmpty) {
-    if (savedHost.contains('trycloudflare.com') &&
-        !savedHost.contains('festival-coaches-pending-article')) {
+    if (savedHost.contains('trycloudflare.com') ||
+        savedHost.contains('ngrok') ||
+        savedHost.contains('jessica-western') ||
+        savedHost.contains('bottle-equilibrium')) {
       await storageService.setServerHost(null);
     } else {
       AppConstants.setServerHost(savedHost);

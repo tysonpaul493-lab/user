@@ -50,16 +50,42 @@
       });
     }
   </script>
+
+  <script>
+    // Unregister legacy service workers and clear browser cache
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].unregister();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (var i = 0; i < names.length; i++) {
+          caches.delete(names[i]);
+        }
+      });
+    }
+    try {
+      for (var k in localStorage) {
+        var v = localStorage.getItem(k);
+        if (v && (v.indexOf('trycloudflare.com') !== -1 || v.indexOf('bottle-equilibrium') !== -1 || v.indexOf('jessica-western') !== -1)) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch(e) {}
+  </script>
 </head>
 <body>
   <!--
-    You can customize the "flutter_bootstrap.js?v=202611231025" script.
+    You can customize the "flutter_bootstrap.js?v=build_1795422917563" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.
 
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js?v=202611231025?v=nocache_20261123_1" async></script>
+  <script src="flutter_bootstrap.js?v=build_1795422917563" async></script>
 </body>
 </html>

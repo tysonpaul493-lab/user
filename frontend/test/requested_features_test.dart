@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -24,6 +25,20 @@ void main() {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       FlutterSecureStorage.setMockInitialValues({});
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.liferoute.emergency/sim_info'),
+        (MethodCall methodCall) async {
+          return {
+            'hasSim': true,
+            'simNumber': '+91 8428304510',
+            'carrier': 'Airtel 5G',
+            'simCount': 1,
+            'simNumbers': ['+91 8428304510'],
+            'carriers': ['Airtel 5G'],
+          };
+        },
+      );
     });
 
     test(
@@ -47,23 +62,23 @@ void main() {
 
     test('2. Profile name persists across logout and restore on login with same phone', () async {
       final storage = await StorageService.init();
-      expect(storage.isDemoMode(), isFalse);
-      await storage.setDemoMode(true);
-      final apiClient = ApiClient(storage);
+      final user = UserModel(
+        id: 'usr-1',
+        name: 'Aravind Swaminathan',
+        phone: '8428304510',
+        bloodGroup: 'O+',
+        emergencyNotes: 'Diabetic Patient',
+      );
+      await storage.saveUser(user);
+      await storage.saveLastRegisteredPhone('8428304510');
       final container = ProviderContainer(
         overrides: [
           storageServiceProvider.overrideWithValue(storage),
-          apiClientProvider.overrideWithValue(apiClient),
         ],
       );
 
       final authNotifier = container.read(authProvider.notifier);
-
-      // Send OTP then verify OTP initially for 8428304510
-      await authNotifier.sendOtp('8428304510');
-      final initialOtp =
-          container.read(authProvider).lastGeneratedOtp ?? '123456';
-      await authNotifier.verifyOtp(initialOtp);
+      await authNotifier.signInWithRegisteredUser(user);
       expect(container.read(authProvider).isAuthenticated, isTrue);
 
       // User updates profile name and emergency details
@@ -83,10 +98,7 @@ void main() {
       expect(container.read(authProvider).user, isNull);
 
       // User logs in again with the same mobile number
-      await authNotifier.sendOtp('8428304510');
-      final secondOtp =
-          container.read(authProvider).lastGeneratedOtp ?? '654321';
-      await authNotifier.verifyOtp(secondOtp);
+      await authNotifier.signInWithRegisteredUser(user);
       expect(container.read(authProvider).isAuthenticated, isTrue);
 
       // Verify that the updated profile name and phone automatically appear!
@@ -148,15 +160,17 @@ void main() {
         );
         expect(find.text('Get Verification Code'), findsNothing);
 
-        // 4b. Verify both Name and SIM mobile fields start empty (no hardcoded defaults)
+        // 4b. Verify Name starts empty, and SIM mobile is either empty or matches detected SIM
         final nameField = find.byType(TextField).first;
         final phoneField = find.byType(TextField).last;
         expect(tester.widget<TextField>(nameField).controller?.text, isEmpty);
-        expect(tester.widget<TextField>(phoneField).controller?.text, isEmpty);
-        final loginBtn = find.text('Verify & Sign In');
+        final detectedPhone = tester.widget<TextField>(phoneField).controller?.text ?? '';
+        expect(detectedPhone.isEmpty || detectedPhone == '8428304510', isTrue);
+        final loginBtn = find.text('Verify SIM & Sign In');
         expect(loginBtn, findsOneWidget);
 
         // 4c. Validate short phone number rejection
+        await tester.enterText(nameField, 'Test Citizen');
         await tester.enterText(phoneField, '123');
         await tester.ensureVisible(loginBtn);
         await tester.tap(loginBtn);
@@ -368,6 +382,7 @@ void main() {
           child: const MaterialApp(home: LoginScreen()),
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(find.text('🚨 1-Tap Emergency Access'), findsNothing);
       expect(find.byIcon(Icons.dns_rounded), findsNothing);

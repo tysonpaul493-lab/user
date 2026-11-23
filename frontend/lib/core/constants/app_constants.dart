@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-const String _kDefaultLiveWebBackend = 'https://festival-coaches-pending-article.trycloudflare.com/api';
+const String _kDefaultLiveWebBackend = 'http://localhost:8000/api';
 
 String get _detectedUserHost {
   if (AppConstants.configuredApiUrl.isNotEmpty) {
@@ -16,7 +16,7 @@ class AppConstants {
   /// Override at build time via `--dart-define=DEFAULT_LAN_HOST=...` or `--dart-define=DEFAULT_API_URL=...`.
   static const String fallbackLanHost = String.fromEnvironment(
     'DEFAULT_LAN_HOST',
-    defaultValue: '192.168.0.112',
+    defaultValue: '192.168.0.106',
   );
   static const String configuredApiUrl = String.fromEnvironment(
     'DEFAULT_API_URL',

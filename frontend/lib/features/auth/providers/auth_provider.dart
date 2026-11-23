@@ -409,12 +409,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isOtpSent: false,
     );
 
-    try {
-      await _apiClient.updateProfile({
-        'phone': normalizedPhone,
-        'name': resolvedName,
-      });
-    } catch (_) {}
+    if (!_storageService.isDemoMode()) {
+      try {
+        await _apiClient.updateProfile({
+          'phone': normalizedPhone,
+          'name': resolvedName,
+        });
+      } catch (_) {}
+    }
 
     return true;
   }
@@ -585,9 +587,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storageService.saveUser(updated);
     await _storageService.saveRegisteredUserByPhone(updated);
 
-    try {
-      await _apiClient.updateProfile(updated.toJson());
-    } catch (_) {}
+    if (!_storageService.isDemoMode()) {
+      try {
+        await _apiClient.updateProfile(updated.toJson());
+      } catch (_) {}
+    }
 
     state = state.copyWith(user: updated);
   }
