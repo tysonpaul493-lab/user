@@ -1,11 +1,11 @@
 {
-    "name": "emergency_user",
-    "short_name": "emergency_user",
+    "name": "A2I",
+    "short_name": "A2I",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#DC2626",
+    "theme_color": "#DC2626",
+    "description": "A2I Emergency Medical Response and Ambulance Booking",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

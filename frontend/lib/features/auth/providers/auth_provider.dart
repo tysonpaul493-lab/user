@@ -130,8 +130,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return local;
   }
 
-  /// Verify user login with registered mobile number
-  Future<bool> loginWithPhone(String phone) async {
+  /// Verify user login with registered mobile number and physical SIM verification
+  Future<bool> loginWithPhone(
+    String phone, {
+    String? name,
+    String? simNumber,
+    String? carrier,
+  }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
@@ -147,17 +152,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     }
 
+    final trimmedName = name?.trim() ?? '';
+
     // 1. Try server verification first
     try {
-      final res = await _apiClient.loginUser(tenDigit);
+      final res = await _apiClient.loginUser(
+        tenDigit,
+        name: trimmedName.isNotEmpty ? trimmedName : null,
+        simNumber: simNumber,
+        carrier: carrier,
+      );
       if (res['status'] == 'success' && res['user'] != null) {
         final u = res['user'];
         final serverUser = UserModel(
           id: (u['id'] ?? 'usr-$tenDigit').toString(),
-          name: (u['name'] ?? '').toString(),
+          name: (u['name'] != null && u['name'].toString().trim().isNotEmpty)
+              ? u['name'].toString().trim()
+              : (trimmedName.isNotEmpty ? trimmedName : 'Emergency Caller'),
           phone: (u['phone'] ?? '+91 $tenDigit').toString(),
-          bloodGroup: u['blood_group']?.toString(),
-          emergencyNotes: u['emergency_notes']?.toString(),
+          bloodGroup: u['blood_group']?.toString() ?? 'O+',
+          emergencyNotes: u['emergency_notes']?.toString() ?? '',
         );
 
         await _storageService.saveUser(serverUser);
@@ -174,37 +188,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
           errorMessage: null,
         );
         return true;
-      } else if (res['is_registered'] == false) {
+      } else if (res['status'] == 'error' || res['is_registered'] == false) {
         state = state.copyWith(
           isLoading: false,
           errorMessage: res['message']?.toString() ??
-              'Wrong mobile number: This number is not registered. Please register first.',
+              'Unable to sign in. Please verify your SIM number.',
         );
         return false;
       }
     } catch (_) {}
 
-    // 2. Check local registered user database as offline fallback
+    // 2. Offline fallback: use local registered user database or create user with provided name
     final local = _storageService.getRegisteredUserByPhone(tenDigit);
-    if (local != null && local.name.trim().isNotEmpty) {
-      await _storageService.saveUser(local);
-      await _storageService.saveLastRegisteredPhone(tenDigit);
-      await _storageService.saveToken('token_$tenDigit');
+    final effectiveUser = local ?? UserModel(
+      id: 'usr-$tenDigit',
+      name: trimmedName.isNotEmpty ? trimmedName : 'Emergency User',
+      phone: '+91 $tenDigit',
+      bloodGroup: 'O+',
+      emergencyNotes: '',
+    );
 
-      state = state.copyWith(
-        user: local,
-        currentPhone: local.phone,
-        isLoading: false,
-        errorMessage: null,
-      );
-      return true;
-    }
+    await _storageService.saveUser(effectiveUser);
+    await _storageService.saveRegisteredUserByPhone(effectiveUser);
+    await _storageService.saveLastRegisteredPhone(tenDigit);
+    await _storageService.saveToken('token_$tenDigit');
 
     state = state.copyWith(
+      user: effectiveUser,
+      currentPhone: effectiveUser.phone,
       isLoading: false,
-      errorMessage: 'Wrong mobile number: This number is not registered. Please switch to Register.',
+      errorMessage: null,
     );
-    return false;
+    return true;
   }
 
   /// Register a new user profile

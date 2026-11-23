@@ -50,7 +50,10 @@ class ReverbSocketService {
   }
 
   String _buildWsUrl() {
-    final useTls = AppConstants.reverbUseTls || kIsWeb || AppConstants.reverbHost.contains('trycloudflare.com');
+    final isSecureWeb = kIsWeb && Uri.base.scheme == 'https';
+    final useTls = AppConstants.reverbUseTls ||
+        isSecureWeb ||
+        AppConstants.reverbHost.contains('trycloudflare.com');
     final scheme = useTls ? 'wss' : 'ws';
     final host = AppConstants.reverbHost;
     final port = AppConstants.reverbPort;

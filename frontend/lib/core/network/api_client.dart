@@ -245,11 +245,22 @@ class ApiClient {
     }
   }
 
-  /// Verify user login with registered mobile number
-  Future<Map<String, dynamic>> loginUser(String phone) async {
+  /// Verify user login with registered mobile number and SIM verification
+  Future<Map<String, dynamic>> loginUser(
+    String phone, {
+    String? name,
+    String? simNumber,
+    String? carrier,
+  }) async {
     try {
+      final payload = <String, dynamic>{
+        'phone': phone,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        if (simNumber != null && simNumber.trim().isNotEmpty) 'sim_number': simNumber.trim(),
+        if (carrier != null && carrier.trim().isNotEmpty) 'carrier': carrier.trim(),
+      };
       final response = await _executeWithFailover(
-        () => _dio.post('/user/auth/login', data: {'phone': phone}),
+        () => _dio.post('/user/auth/login', data: payload),
       );
       if (response.data is Map) {
         final data = Map<String, dynamic>.from(response.data as Map);
@@ -270,7 +281,7 @@ class ApiClient {
       return {
         'status': 'error',
         'is_registered': false,
-        'message': 'Wrong mobile number: This number is not registered. Please register first.',
+        'message': 'Security or network error: Unable to verify mobile number.',
       };
     } catch (e) {
       return {

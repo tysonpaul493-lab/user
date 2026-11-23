@@ -59,6 +59,9 @@ class MainActivity: FlutterActivity() {
             hasPhoneStatePermission
         }
 
+        val allSimNumbers = ArrayList<String>()
+        val allCarriers = ArrayList<String>()
+
         if (hasPhoneStatePermission || hasNumbersPermission) {
             try {
                 val subManager = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
@@ -67,35 +70,44 @@ class MainActivity: FlutterActivity() {
                     if (!activeSubs.isNullOrEmpty()) {
                         simCount = activeSubs.size
                         hasSim = true
-                        val firstSub = activeSubs[0]
-                        if (carrierName.isNullOrBlank()) {
-                            carrierName = firstSub.carrierName?.toString()
-                        }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && hasNumbersPermission) {
-                            try {
-                                val num = subManager.getPhoneNumber(firstSub.subscriptionId)
-                                if (!num.isNullOrBlank()) {
-                                    simNumber = num
-                                }
-                            } catch (_: Exception) {}
-                        }
-                        if (simNumber.isNullOrBlank()) {
-                            @Suppress("DEPRECATION")
-                            val num = firstSub.number
-                            if (!num.isNullOrBlank()) {
-                                simNumber = num
+                        for (sub in activeSubs) {
+                            val cName = sub.carrierName?.toString()
+                            if (!cName.isNullOrBlank() && !allCarriers.contains(cName)) {
+                                allCarriers.add(cName)
                             }
+                            if (carrierName.isNullOrBlank()) {
+                                carrierName = cName
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && hasNumbersPermission) {
+                                try {
+                                    val num = subManager.getPhoneNumber(sub.subscriptionId)
+                                    if (!num.isNullOrBlank() && !allSimNumbers.contains(num)) {
+                                        allSimNumbers.add(num)
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                            @Suppress("DEPRECATION")
+                            val num = sub.number
+                            if (!num.isNullOrBlank() && !allSimNumbers.contains(num)) {
+                                allSimNumbers.add(num)
+                            }
+                        }
+                        if (simNumber.isNullOrBlank() && allSimNumbers.isNotEmpty()) {
+                            simNumber = allSimNumbers[0]
                         }
                     }
                 }
             } catch (_: Exception) {}
 
-            if (simNumber.isNullOrBlank() && telephonyManager != null) {
+            if (telephonyManager != null) {
                 try {
                     @Suppress("DEPRECATION")
                     val line1 = telephonyManager.line1Number
-                    if (!line1.isNullOrBlank()) {
-                        simNumber = line1
+                    if (!line1.isNullOrBlank() && !allSimNumbers.contains(line1)) {
+                        allSimNumbers.add(line1)
+                        if (simNumber.isNullOrBlank()) {
+                            simNumber = line1
+                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -104,7 +116,9 @@ class MainActivity: FlutterActivity() {
         return mapOf(
             "hasSim" to hasSim,
             "simNumber" to simNumber,
+            "simNumbers" to allSimNumbers,
             "carrier" to carrierName,
+            "carriers" to allCarriers,
             "simCount" to simCount
         )
     }
