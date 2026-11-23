@@ -14,6 +14,21 @@ void main() async {
 
   // Initialize secure local storage & shared preferences
   final storageService = await StorageService.init();
+
+  // Purge any legacy 8428304510 from user storage
+  try {
+    for (final key in storageService.prefs.getKeys()) {
+      if (key.contains('8428304510')) {
+        await storageService.prefs.remove(key);
+      } else {
+        final val = storageService.prefs.get(key)?.toString() ?? '';
+        if (val.contains('8428304510')) {
+          await storageService.prefs.remove(key);
+        }
+      }
+    }
+  } catch (_) {}
+
   final savedHost = storageService.getServerHost();
   if (savedHost != null && savedHost.isNotEmpty) {
     if (savedHost.contains('trycloudflare.com') ||

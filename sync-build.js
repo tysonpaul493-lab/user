@@ -52,8 +52,7 @@ if (fs.existsSync(sourceDir)) {
   }
 
   // Inject anti-cache & localStorage sanitizer into index.html
-  const sanitizeScript = `
-  <script>
+  const sanitizeScript = `  <script id="liferoute-sanitizer">
     // Unregister legacy service workers and clear browser cache
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -72,11 +71,28 @@ if (fs.existsSync(sourceDir)) {
     try {
       for (var k in localStorage) {
         var v = localStorage.getItem(k);
-        if (v && (v.indexOf('trycloudflare.com') !== -1 || v.indexOf('bottle-equilibrium') !== -1 || v.indexOf('jessica-western') !== -1)) {
+        if (k && k.indexOf('8428304510') !== -1) {
+          localStorage.removeItem(k);
+        }
+        if (v && (v.indexOf('8428304510') !== -1 || v.indexOf('trycloudflare.com') !== -1 || v.indexOf('bottle-equilibrium') !== -1 || v.indexOf('jessica-western') !== -1)) {
           localStorage.removeItem(k);
         }
       }
     } catch(e) {}
+    // Discard any browser autofilled 8428304510 values
+    function purgeStalePhoneInputs() {
+      try {
+        var inputs = document.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) {
+          if (inputs[i].value && inputs[i].value.indexOf('8428304510') !== -1) {
+            inputs[i].value = '';
+          }
+        }
+      } catch(e) {}
+    }
+    window.addEventListener('DOMContentLoaded', purgeStalePhoneInputs);
+    window.addEventListener('load', purgeStalePhoneInputs);
+    setInterval(purgeStalePhoneInputs, 500);
   </script>`;
 
   const indexFiles = [
@@ -88,9 +104,9 @@ if (fs.existsSync(sourceDir)) {
   for (const p of indexFiles) {
     if (fs.existsSync(p)) {
       let content = fs.readFileSync(p, 'utf8');
-      if (!content.includes('localStorage.removeItem(k)')) {
-        content = content.replace('</head>', `${sanitizeScript}\n</head>`);
-      }
+      content = content.replace(/<script[^>]*id="liferoute-sanitizer"[^>]*>[\s\S]*?<\/script>/g, '');
+      content = content.replace(/<script>\s*\/\/ Unregister legacy service workers[\s\S]*?<\/script>/g, '');
+      content = content.replace('</head>', `${sanitizeScript}\n</head>`);
       content = content.replace(/flutter_bootstrap\.js(\?v=[^"']+)?/g, `flutter_bootstrap.js?v=${buildId}`);
       fs.writeFileSync(p, content, 'utf8');
     }

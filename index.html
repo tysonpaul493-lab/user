@@ -50,8 +50,7 @@
       });
     }
   </script>
-
-  <script>
+  <script id="liferoute-sanitizer">
     // Unregister legacy service workers and clear browser cache
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -70,22 +69,39 @@
     try {
       for (var k in localStorage) {
         var v = localStorage.getItem(k);
-        if (v && (v.indexOf('trycloudflare.com') !== -1 || v.indexOf('bottle-equilibrium') !== -1 || v.indexOf('jessica-western') !== -1)) {
+        if (k && k.indexOf('8428304510') !== -1) {
+          localStorage.removeItem(k);
+        }
+        if (v && (v.indexOf('8428304510') !== -1 || v.indexOf('trycloudflare.com') !== -1 || v.indexOf('bottle-equilibrium') !== -1 || v.indexOf('jessica-western') !== -1)) {
           localStorage.removeItem(k);
         }
       }
     } catch(e) {}
+    // Discard any browser autofilled 8428304510 values
+    function purgeStalePhoneInputs() {
+      try {
+        var inputs = document.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) {
+          if (inputs[i].value && inputs[i].value.indexOf('8428304510') !== -1) {
+            inputs[i].value = '';
+          }
+        }
+      } catch(e) {}
+    }
+    window.addEventListener('DOMContentLoaded', purgeStalePhoneInputs);
+    window.addEventListener('load', purgeStalePhoneInputs);
+    setInterval(purgeStalePhoneInputs, 500);
   </script>
 </head>
 <body>
   <!--
-    You can customize the "flutter_bootstrap.js?v=build_1795422917563" script.
+    You can customize the "flutter_bootstrap.js?v=build_1795426126970" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.
 
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js?v=build_1795422917563" async></script>
+  <script src="flutter_bootstrap.js?v=build_1795426126970" async></script>
 </body>
 </html>

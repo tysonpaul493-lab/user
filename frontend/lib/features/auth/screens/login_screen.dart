@@ -41,7 +41,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _nameController.text = savedUser.name;
       }
       final clean = savedUser.phone.replaceAll(RegExp(r'\D'), '');
-      if (clean.length >= 10 && _loginPhoneController.text.isEmpty) {
+      if (clean.length >= 10 && _loginPhoneController.text.isEmpty && !clean.contains('8428304510')) {
         _loginPhoneController.text = clean.substring(clean.length - 10);
       }
     }
@@ -194,10 +194,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _handleEmergencyQuickAccess() async {
+    final authState = ref.read(authProvider);
+    final isTamil = authState.selectedLocale == 'ta';
     final rawInput = _loginPhoneController.text.trim();
     final digits = rawInput.replaceAll(RegExp(r'\D'), '');
-    final effectivePhone =
-        digits.length == 10 ? '+91 $digits' : '+91 8428304510';
+    if (digits.length != 10) {
+      setState(() {
+        _errorMessage = isTamil
+            ? 'செல்லுபடியாகும் 10-இலக்க மொபைல் எண்ணை உள்ளிடவும்.'
+            : 'Please enter a valid 10-digit mobile number';
+      });
+      return;
+    }
+    final effectivePhone = '+91 $digits';
     final nameInput = _nameController.text.trim();
     final callerName = nameInput.isNotEmpty ? nameInput : 'Emergency Caller';
 
@@ -282,8 +291,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               Text(
                 isTamil
-                    ? 'ஆல் இந்தியா தமிழ் அனைத்து அறக்கட்டளை'
-                    : 'All India Tamil All Trust',
+                    ? 'ஆல் இந்தியா தமிழ் அன்னை அறக்கட்டளை'
+                    : 'All India Tamil Annai Trust',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 20,

@@ -6,7 +6,7 @@ class AppStrings {
 
   static final Map<String, Map<String, String>> _localizedValues = {
     'en': {
-      'appName': 'All India Tamil All Trust Ambulance',
+      'appName': 'All India Tamil Annai Trust Ambulance',
       'bookAmbulance': 'BOOK AN AMBULANCE',
       'sos': 'Book Ambulance',
       'holdForEmergency': 'TAP FOR INSTANT DISPATCH',
@@ -55,7 +55,7 @@ class AppStrings {
       'premiumBanner': 'Sign Up for FlashAid Priority Pass! Free with NHS/Gov ID',
     },
     'ta': {
-      'appName': 'ஆல் இந்தியா தமிழ் அனைத்து அறக்கட்டளை',
+      'appName': 'ஆல் இந்தியா தமிழ் அன்னை அறக்கட்டளை',
       'bookAmbulance': 'ஆம்புலன்ஸ் முன்பதிவு செய்க',
       'sos': 'ஆம்புலன்ஸ் முன்பதிவு',
       'holdForEmergency': 'உடனடி உதவிக்கு அழுத்தவும்',
