@@ -153,20 +153,22 @@ class HospitalState {
       return true;
     }).toList();
 
+    final finalResult = (result.isEmpty && q.isEmpty) ? hospitals : result;
+
     // 1st Priority: Government Hospitals at the top of the suggestion & nearest list!
     // 2nd Priority: Nearest distance in kilometers from user's live coordinates
-    result.sort((a, b) {
+    finalResult.sort((a, b) {
       if (a.isGovernment && !b.isGovernment) return -1;
       if (!a.isGovernment && b.isGovernment) return 1;
-      final distA = (userLat != null && userLng != null)
+      final distA = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
           ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, a.lat, a.lng)
           : a.distanceKm;
-      final distB = (userLat != null && userLng != null)
+      final distB = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
           ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, b.lat, b.lng)
           : b.distanceKm;
       return distA.compareTo(distB);
     });
-    return result;
+    return finalResult;
   }
 
   HospitalState copyWith({
@@ -219,8 +221,12 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
 
   Future<void> fetchNearbyHospitals({double? lat, double? lng, String? category}) async {
     state = state.copyWith(isLoading: true);
-    final targetLat = lat ?? _lastLat ?? AppConstants.defaultLat;
-    final targetLng = lng ?? _lastLng ?? AppConstants.defaultLng;
+    final targetLat = (lat != null && lat != 0.0)
+        ? lat
+        : (_lastLat != null && _lastLat != 0.0 ? _lastLat! : AppConstants.defaultLat);
+    final targetLng = (lng != null && lng != 0.0)
+        ? lng
+        : (_lastLng != null && _lastLng != 0.0 ? _lastLng! : AppConstants.defaultLng);
     _lastLat = targetLat;
     _lastLng = targetLng;
     final targetCategory = category ?? state.activeCategory;

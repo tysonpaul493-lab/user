@@ -458,7 +458,9 @@ class ApiClient {
         final bGov = _isGovernment(b['name']?.toString() ?? '');
         if (aGov && !bGov) return -1;
         if (!aGov && bGov) return 1;
-        return (a['distance_km'] as num).compareTo(b['distance_km'] as num);
+        final distA = (a['distance_km'] as num?)?.toDouble() ?? 999999.0;
+        final distB = (b['distance_km'] as num?)?.toDouble() ?? 999999.0;
+        return distA.compareTo(distB);
       });
       return list;
     }
@@ -589,7 +591,9 @@ class ApiClient {
       final bGov = _isGovernment(b['name']?.toString() ?? '');
       if (aGov && !bGov) return -1;
       if (!aGov && bGov) return 1;
-      return (a['distance_km'] as num).compareTo(b['distance_km'] as num);
+      final distA = (a['distance_km'] as num?)?.toDouble() ?? 999999.0;
+      final distB = (b['distance_km'] as num?)?.toDouble() ?? 999999.0;
+      return distA.compareTo(distB);
     });
 
     return filtered.isNotEmpty ? filtered : list;

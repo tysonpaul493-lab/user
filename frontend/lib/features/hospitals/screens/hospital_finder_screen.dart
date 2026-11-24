@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/location_service.dart';
 import '../../booking/providers/booking_provider.dart';
 import '../providers/hospital_provider.dart';
@@ -48,8 +49,8 @@ class _HospitalFinderScreenState extends ConsumerState<HospitalFinderScreen> {
   Widget build(BuildContext context) {
     final hospitalState = ref.watch(hospitalProvider);
     final bookingState = ref.watch(bookingProvider);
-    final userLat = bookingState.currentLat;
-    final userLng = bookingState.currentLng;
+    final userLat = (bookingState.currentLat != 0.0) ? bookingState.currentLat : AppConstants.defaultLat;
+    final userLng = (bookingState.currentLng != 0.0) ? bookingState.currentLng : AppConstants.defaultLng;
     final hospitals = [...hospitalState.filteredHospitals];
 
     // Sort strictly by live geographic distance from user current coordinates
@@ -263,6 +264,8 @@ class _HospitalFinderScreenState extends ConsumerState<HospitalFinderScreen> {
                                   _searchController.clear();
                                   ref.read(hospitalProvider.notifier).setSearchQuery('');
                                   ref.read(hospitalProvider.notifier).setFilter('All');
+                                  ref.read(hospitalProvider.notifier).setCategory(null);
+                                  ref.read(hospitalProvider.notifier).fetchNearbyHospitals();
                                 },
                                 icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.white),
                                 label: const Text('Show All Nearest Hospitals', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

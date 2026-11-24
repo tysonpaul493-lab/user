@@ -591,6 +591,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       Expanded(
                                         child: Builder(
                                           builder: (_) {
+                                            if (hospitalState.filteredHospitals.isEmpty) {
+                                              return const Text(
+                                                'Finding verified emergency centers in your surroundings...',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0xFF1E40AF),
+                                                ),
+                                              );
+                                            }
                                             final h = hospitalState
                                                 .filteredHospitals
                                                 .first;
