@@ -559,7 +559,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
         );
 
         // Connect to Laravel Reverb authenticated private channel
-        final token = await _storageService.getToken() ?? 'demo_token';
+        final token = await _storageService.getToken() ?? '';
         _reverbService.connectToBookingChannel(
           bookingId: booking.id,
           authToken: token,

@@ -41,7 +41,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _nameController.text = savedUser.name;
       }
       final clean = savedUser.phone.replaceAll(RegExp(r'\D'), '');
-      if (clean.length >= 10 && _loginPhoneController.text.isEmpty && !clean.contains('8428304510')) {
+      if (clean.length >= 10 && _loginPhoneController.text.isEmpty) {
         _loginPhoneController.text = clean.substring(clean.length - 10);
       }
     }

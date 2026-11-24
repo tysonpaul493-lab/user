@@ -196,30 +196,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         return false;
       }
-    } catch (_) {}
-
-    // 2. Offline fallback: use local registered user database or create user with provided name
-    final local = _storageService.getRegisteredUserByPhone(tenDigit);
-    final effectiveUser = local ?? UserModel(
-      id: 'usr-$tenDigit',
-      name: trimmedName.isNotEmpty ? trimmedName : 'Emergency User',
-      phone: '+91 $tenDigit',
-      bloodGroup: 'O+',
-      emergencyNotes: '',
-    );
-
-    await _storageService.saveUser(effectiveUser);
-    await _storageService.saveRegisteredUserByPhone(effectiveUser);
-    await _storageService.saveLastRegisteredPhone(tenDigit);
-    await _storageService.saveToken('token_$tenDigit');
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Unable to reach dispatch server. Please check your connection.',
+      );
+      return false;
+    }
 
     state = state.copyWith(
-      user: effectiveUser,
-      currentPhone: effectiveUser.phone,
       isLoading: false,
-      errorMessage: null,
+      errorMessage: 'Unable to sign in. Please check your network connection.',
     );
-    return true;
+    return false;
   }
 
   /// Register a new user profile
@@ -253,40 +242,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     final formattedPhone = '+91 $tenDigit';
-    final user = UserModel(
-      id: 'usr-${DateTime.now().millisecondsSinceEpoch}',
-      name: name.trim(),
-      phone: formattedPhone,
-      bloodGroup: bloodGroup ?? 'O+',
-      emergencyNotes: emergencyNotes ?? '',
-    );
-
-    // Save locally
-    await _storageService.saveUser(user);
-    await _storageService.saveRegisteredUserByPhone(user);
-    await _storageService.saveLastRegisteredPhone(tenDigit);
-    await _storageService.saveToken('token_$tenDigit');
 
     // Sync with backend API
     try {
       final res = await _apiClient.registerUser(
-        name: user.name,
+        name: name.trim(),
         phone: tenDigit,
-        bloodGroup: user.bloodGroup,
-        emergencyNotes: user.emergencyNotes,
+        bloodGroup: bloodGroup ?? 'O+',
+        emergencyNotes: emergencyNotes ?? '',
       );
-      if (res['token'] != null) {
-        await _storageService.saveToken(res['token'].toString());
-      }
-    } catch (_) {}
 
-    state = state.copyWith(
-      user: user,
-      currentPhone: formattedPhone,
-      isLoading: false,
-      errorMessage: null,
-    );
-    return true;
+      final token = res['token']?.toString() ?? 'token_$tenDigit';
+      await _storageService.saveToken(token);
+
+      final u = res['user'] is Map ? res['user'] as Map : null;
+      final serverUser = UserModel(
+        id: u != null && u['id'] != null ? u['id'].toString() : 'usr-$tenDigit',
+        name: u != null && u['name'] != null ? u['name'].toString() : name.trim(),
+        phone: u != null && u['phone'] != null ? u['phone'].toString() : formattedPhone,
+        bloodGroup: u != null && u['blood_group'] != null ? u['blood_group'].toString() : (bloodGroup ?? 'O+'),
+        emergencyNotes: u != null && u['emergency_notes'] != null ? u['emergency_notes'].toString() : (emergencyNotes ?? ''),
+      );
+
+      // Save locally
+      await _storageService.saveUser(serverUser);
+      await _storageService.saveRegisteredUserByPhone(serverUser);
+      await _storageService.saveLastRegisteredPhone(tenDigit);
+
+      state = state.copyWith(
+        user: serverUser,
+        currentPhone: formattedPhone,
+        isLoading: false,
+        errorMessage: null,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Unable to connect to dispatch server. Please try again.',
+      );
+      return false;
+    }
   }
 
   /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)

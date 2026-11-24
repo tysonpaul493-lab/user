@@ -233,12 +233,15 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
       );
       final hospitals = rawList.map((e) {
         final h = HospitalModel.fromJson(e);
-        final dist = LocationService.calculateDrivingDistanceKm(targetLat, targetLng, h.lat, h.lng);
-        final eta = (dist * 2.4).ceil().clamp(2, 60);
-        return h.copyWith(
-          distanceKm: double.parse(dist.toStringAsFixed(1)),
-          estimatedDriveTime: '$eta min',
-        );
+        if (targetLat != 0.0 && targetLng != 0.0 && h.lat != 0.0 && h.lng != 0.0) {
+          final dist = LocationService.calculateDrivingDistanceKm(targetLat, targetLng, h.lat, h.lng);
+          final eta = (dist * 2.4).ceil().clamp(2, 60);
+          return h.copyWith(
+            distanceKm: double.parse(dist.toStringAsFixed(1)),
+            estimatedDriveTime: '$eta min',
+          );
+        }
+        return h;
       }).toList();
       state = state.copyWith(
         isLoading: false,

@@ -233,20 +233,28 @@ class AppConstants {
     }
     if (kIsWeb) {
       try {
-        final webHost = Uri.base.host.trim();
-        if (webHost.isNotEmpty && (webHost == 'localhost' || webHost == '127.0.0.1' || webHost.startsWith('192.168.'))) {
-          return 'http://$webHost:8000/api';
+        final origin = Uri.base.origin.trim();
+        if (origin.isNotEmpty && !origin.startsWith('file:') && origin != 'null') {
+          return '$origin/api';
         }
       } catch (_) {}
     }
     return _kDefaultLiveWebBackend;
   }
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
-  static String get reverbHost => effectiveHost.contains('trycloudflare.com')
-      ? 'bestsellers-hoping-ipod-keys.trycloudflare.com'
-      : effectiveHost;
-  static int get reverbPort => reverbHost.contains('trycloudflare.com') ? 443 : 8080;
-  static bool get reverbUseTls => reverbHost.contains('trycloudflare.com') || defaultBaseUrl.startsWith('https://');
+  static String get reverbHost {
+    if (kIsWeb) {
+      try {
+        final host = Uri.base.host.trim();
+        if (host.isNotEmpty && !host.contains('trycloudflare.com')) {
+          return host;
+        }
+      } catch (_) {}
+    }
+    return effectiveHost == 'localhost' || effectiveHost == '127.0.0.1' ? '127.0.0.1' : effectiveHost;
+  }
+  static int get reverbPort => 8080;
+  static bool get reverbUseTls => false;
   static const String reverbAppKey = 'liferoute_reverb_key';
 
   // Storage Keys

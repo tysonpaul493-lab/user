@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../constants/app_constants.dart';
 
 class LocationResult {
   final double latitude;
@@ -58,8 +57,8 @@ class LocationService {
       serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         return LocationResult(
-          latitude: AppConstants.defaultLat,
-          longitude: AppConstants.defaultLng,
+          latitude: 0.0,
+          longitude: 0.0,
           address: 'GPS Disabled • Tap to enable',
           isAccurate: false,
           serviceEnabled: false,
@@ -74,8 +73,8 @@ class LocationService {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           return LocationResult(
-            latitude: AppConstants.defaultLat,
-            longitude: AppConstants.defaultLng,
+            latitude: 0.0,
+            longitude: 0.0,
             address: 'Location Permission Denied',
             isAccurate: false,
             permissionGranted: false,
@@ -86,8 +85,8 @@ class LocationService {
 
       if (permission == LocationPermission.deniedForever) {
         return LocationResult(
-          latitude: AppConstants.defaultLat,
-          longitude: AppConstants.defaultLng,
+          latitude: 0.0,
+          longitude: 0.0,
           address: 'Location Permission Blocked',
           isAccurate: false,
           permissionGranted: false,
@@ -129,8 +128,8 @@ class LocationService {
 
       if (position == null) {
         return LocationResult(
-          latitude: AppConstants.defaultLat,
-          longitude: AppConstants.defaultLng,
+          latitude: 0.0,
+          longitude: 0.0,
           address: 'Detecting Live GPS Location...',
           fullAddress: 'Acquiring high-accuracy satellite fix for live emergency dispatch...',
           isAccurate: false,
@@ -153,8 +152,8 @@ class LocationService {
     } catch (e) {
       debugPrint('Error getting location: $e');
       return LocationResult(
-        latitude: AppConstants.defaultLat,
-        longitude: AppConstants.defaultLng,
+        latitude: 0.0,
+        longitude: 0.0,
         address: 'Live Location Unavailable',
         fullAddress: 'Unable to detect live GPS fix. Tap Live GPS to retry.',
         isAccurate: false,
