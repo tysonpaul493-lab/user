@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:latlong2/latlong.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/route_service.dart';
@@ -50,22 +49,16 @@ class HospitalState {
       if (selectedFilter != null && selectedFilter != 'All') {
         final f = selectedFilter!.toLowerCase();
         if (f.contains('gov') || f.contains('108')) {
-          final isGov = h.isGovernment ||
-              h.name.toLowerCase().contains('government') ||
-              h.name.toLowerCase().contains('108') ||
-              h.name.toLowerCase().contains('cmch') ||
-              h.name.toLowerCase().contains('esi') ||
-              h.name.toLowerCase().contains('gh') ||
-              h.emergencyServices.any((s) => s.toLowerCase().contains('108') || s.toLowerCase().contains('free') || s.toLowerCase().contains('gov'));
-          if (!isGov) return false;
+          if (!h.isGovernment) return false;
         } else if (f.contains('trauma')) {
           final isTrauma = h.hasTraumaCenter ||
               h.name.toLowerCase().contains('trauma') ||
-              h.emergencyServices.any((s) => s.toLowerCase().contains('trauma') || s.toLowerCase().contains('accident') || s.toLowerCase().contains('casualty') || s.toLowerCase().contains('ortho'));
+              h.emergencyServices.any((s) => s.toLowerCase().contains('trauma') || s.toLowerCase().contains('accident') || s.toLowerCase().contains('casualty') || s.toLowerCase().contains('ortho') || s.toLowerCase().contains('emergency'));
           if (!isTrauma) return false;
         } else if (f.contains('icu')) {
           final isIcu = h.hasIcuBed ||
               h.name.toLowerCase().contains('icu') ||
+              h.name.toLowerCase().contains('multi') ||
               h.emergencyServices.any((s) => s.toLowerCase().contains('icu') || s.toLowerCase().contains('critical') || s.toLowerCase().contains('ccu') || s.toLowerCase().contains('picu') || s.toLowerCase().contains('ventilator'));
           if (!isIcu) return false;
         } else if (f.contains('24') || f.contains('7')) {
@@ -78,94 +71,39 @@ class HospitalState {
         }
       }
 
-      // 2. Filter by Emergency Medical Category (when no top chip override is active)
-      if (cat != null && cat.isNotEmpty && cat != 'all' && !h.isGovernment) {
+      // 2. Prioritize matching specialties without filtering out un-tagged acute surrounding hospitals
+      if (cat != null && cat.isNotEmpty && cat != 'all' && !h.isGovernment && h.emergencyServices.isNotEmpty) {
         final services = h.emergencyServices.map((s) => s.toLowerCase()).toList();
         final name = h.name.toLowerCase();
-
         if (cat.contains('cardiac') || cat.contains('heart')) {
-          final isCard = services.any((s) => s.contains('cardiac') || s.contains('cath lab') || s.contains('ccu')) ||
-              name.contains('cardiac') ||
-              name.contains('gknm') ||
-              name.contains('ramakrishna') ||
-              name.contains('kmch') ||
-              name.contains('richmond') ||
-              name.contains('kg');
-          if (!isCard) return false;
-        } else if (cat.contains('trauma') || cat.contains('accident')) {
-          final isTrauma = h.hasTraumaCenter ||
-              services.any((s) => s.contains('trauma') || s.contains('casualty') || s.contains('ortho')) ||
-              name.contains('trauma') ||
-              name.contains('ganga') ||
-              name.contains('kmch') ||
-              name.contains('ashwin') ||
-              name.contains('richmond');
-          if (!isTrauma) return false;
-        } else if (cat.contains('breath') || cat.contains('air')) {
-          final isBreath = services.any((s) => s.contains('pulmonary') || s.contains('icu') || s.contains('ventilator')) ||
-              name.contains('psg') ||
-              name.contains('kmch') ||
-              name.contains('ramakrishna');
-          if (!isBreath) return false;
-        } else if (cat.contains('maternity') || cat.contains('pregnan')) {
-          final isMat = services.any((s) => s.contains('maternity') || s.contains('delivery') || s.contains('neonatal')) ||
-              name.contains('gknm') ||
-              name.contains('psg') ||
-              name.contains('masonic') ||
-              name.contains('esi');
-          if (!isMat) return false;
+          final match = services.any((s) => s.contains('cardiac') || s.contains('cath lab') || s.contains('ccu')) || name.contains('cardiac') || name.contains('heart');
+          if (match) return true;
         } else if (cat.contains('stroke') || cat.contains('neuro')) {
-          final isStroke = services.any((s) => s.contains('stroke') || s.contains('thrombolysis') || s.contains('neuro')) ||
-              name.contains('stroke') ||
-              name.contains('kg') ||
-              name.contains('kmch') ||
-              name.contains('royal care') ||
-              name.contains('ramakrishna');
-          if (!isStroke) return false;
+          final match = services.any((s) => s.contains('stroke') || s.contains('neuro')) || name.contains('neuro') || name.contains('stroke');
+          if (match) return true;
         } else if (cat.contains('pediatric') || cat.contains('child')) {
-          final isPed = services.any((s) => s.contains('pediatric') || s.contains('picu') || s.contains('nicu') || s.contains('neonatal')) ||
-              name.contains('ramakrishna') ||
-              name.contains('masonic') ||
-              name.contains('psg') ||
-              name.contains('gknm');
-          if (!isPed) return false;
-        } else if (cat.contains('burn')) {
-          final isBurn = services.any((s) => s.contains('burn') || s.contains('plastic')) ||
-              name.contains('ganga') ||
-              name.contains('cmch');
-          if (!isBurn) return false;
-        } else if (cat.contains('poison') || cat.contains('snake')) {
-          final isPoison = services.any((s) => s.contains('poison') || s.contains('toxicology') || s.contains('antivenom')) ||
-              name.contains('cmch') ||
-              name.contains('kg');
-          if (!isPoison) return false;
-        } else if (cat.contains('senior') || cat.contains('geriatric') || cat.contains('elder')) {
-          final isSenior = services.any((s) => s.contains('icu') || s.contains('cardiac') || s.contains('emergency') || s.contains('dialysis')) ||
-              name.contains('cmch') ||
-              name.contains('kg') ||
-              name.contains('ramakrishna') ||
-              name.contains('gknm') ||
-              name.contains('psg');
-          if (!isSenior) return false;
+          final match = services.any((s) => s.contains('pediatric') || s.contains('nicu') || s.contains('picu')) || name.contains('child') || name.contains('pediatric');
+          if (match) return true;
         }
       }
 
       return true;
     }).toList();
 
-    final finalResult = (result.isEmpty && q.isEmpty) ? hospitals : result;
+    final finalResult = (result.isEmpty && q.isEmpty && (selectedFilter == null || selectedFilter == 'All')) ? hospitals : result;
 
-    // 1st Priority: Government Hospitals at the top of the suggestion & nearest list!
-    // 2nd Priority: Nearest distance in kilometers from user's live coordinates
+    // Sort by real proximity, giving priority boost to nearby government hospitals within 25km
     finalResult.sort((a, b) {
-      if (a.isGovernment && !b.isGovernment) return -1;
-      if (!a.isGovernment && b.isGovernment) return 1;
       final distA = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
           ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, a.lat, a.lng)
           : a.distanceKm;
       final distB = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
           ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, b.lat, b.lng)
           : b.distanceKm;
+      final aGov = a.isGovernment && distA <= 25.0;
+      final bGov = b.isGovernment && distB <= 25.0;
+      if (aGov && !bGov) return -1;
+      if (!aGov && bGov) return 1;
       return distA.compareTo(distB);
     });
     return finalResult;
@@ -215,18 +153,33 @@ class HospitalNotifier extends StateNotifier<HospitalState> {
   double? _lastLat;
   double? _lastLng;
 
-  HospitalNotifier(this._apiClient) : super(HospitalState()) {
-    fetchNearbyHospitals();
-  }
+  HospitalNotifier(this._apiClient) : super(HospitalState());
 
   Future<void> fetchNearbyHospitals({double? lat, double? lng, String? category}) async {
     state = state.copyWith(isLoading: true);
-    final targetLat = (lat != null && lat != 0.0)
+    var targetLat = (lat != null && lat != 0.0)
         ? lat
-        : (_lastLat != null && _lastLat != 0.0 ? _lastLat! : AppConstants.defaultLat);
-    final targetLng = (lng != null && lng != 0.0)
+        : (_lastLat != null && _lastLat != 0.0 ? _lastLat! : 0.0);
+    var targetLng = (lng != null && lng != 0.0)
         ? lng
-        : (_lastLng != null && _lastLng != 0.0 ? _lastLng! : AppConstants.defaultLng);
+        : (_lastLng != null && _lastLng != 0.0 ? _lastLng! : 0.0);
+
+    // If coordinates are not yet set, acquire live device GPS instead of fake default coords
+    if (targetLat == 0.0 || targetLng == 0.0) {
+      try {
+        final loc = await LocationService.getCurrentLocation(forceHighAccuracy: false);
+        if (loc.isAccurate && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
+          targetLat = loc.latitude;
+          targetLng = loc.longitude;
+        }
+      } catch (_) {}
+    }
+
+    if (targetLat == 0.0 && targetLng == 0.0) {
+      state = state.copyWith(isLoading: false);
+      return;
+    }
+
     _lastLat = targetLat;
     _lastLng = targetLng;
     final targetCategory = category ?? state.activeCategory;

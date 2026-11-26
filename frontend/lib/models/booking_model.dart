@@ -1,4 +1,3 @@
-import '../core/constants/app_constants.dart';
 import 'driver_model.dart';
 import 'hospital_model.dart';
 
@@ -140,9 +139,9 @@ class BookingModel {
       emergencyCategory: json['emergency_category'] ?? 'General Emergency',
       landmark: json['landmark'] ?? json['pickup_landmark'],
       notes: json['notes'] ?? json['essential_instructions'],
-      pickupLat: (json['pickup_lat'] as num?)?.toDouble() ?? (json['pickup_latitude'] as num?)?.toDouble() ?? AppConstants.defaultLat,
-      pickupLng: (json['pickup_lng'] as num?)?.toDouble() ?? (json['pickup_longitude'] as num?)?.toDouble() ?? AppConstants.defaultLng,
-      pickupAddress: json['pickup_address'] ?? AppConstants.defaultLocationName,
+      pickupLat: (json['pickup_lat'] as num?)?.toDouble() ?? (json['pickup_latitude'] as num?)?.toDouble() ?? 0.0,
+      pickupLng: (json['pickup_lng'] as num?)?.toDouble() ?? (json['pickup_longitude'] as num?)?.toDouble() ?? 0.0,
+      pickupAddress: json['pickup_address'] ?? '',
       destinationHospital: json['destination_hospital'] != null
           ? (json['destination_hospital'] is Map<String, dynamic> 
               ? HospitalModel.fromJson(json['destination_hospital']) 

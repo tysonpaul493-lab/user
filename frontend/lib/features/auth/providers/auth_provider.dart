@@ -168,9 +168,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           id: (u['id'] ?? 'usr-$tenDigit').toString(),
           name: (u['name'] != null && u['name'].toString().trim().isNotEmpty)
               ? u['name'].toString().trim()
-              : (trimmedName.isNotEmpty ? trimmedName : 'Emergency Caller'),
+              : trimmedName,
           phone: (u['phone'] ?? '+91 $tenDigit').toString(),
-          bloodGroup: u['blood_group']?.toString() ?? 'O+',
+          bloodGroup: u['blood_group']?.toString(),
           emergencyNotes: u['emergency_notes']?.toString() ?? '',
         );
 
@@ -248,19 +248,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await _apiClient.registerUser(
         name: name.trim(),
         phone: tenDigit,
-        bloodGroup: bloodGroup ?? 'O+',
+        bloodGroup: bloodGroup ?? '',
         emergencyNotes: emergencyNotes ?? '',
       );
 
-      final token = res['token']?.toString() ?? 'token_$tenDigit';
-      await _storageService.saveToken(token);
+      final token = res['token']?.toString();
+      if (token != null && token.isNotEmpty) {
+        await _storageService.saveToken(token);
+      }
 
       final u = res['user'] is Map ? res['user'] as Map : null;
       final serverUser = UserModel(
         id: u != null && u['id'] != null ? u['id'].toString() : 'usr-$tenDigit',
         name: u != null && u['name'] != null ? u['name'].toString() : name.trim(),
         phone: u != null && u['phone'] != null ? u['phone'].toString() : formattedPhone,
-        bloodGroup: u != null && u['blood_group'] != null ? u['blood_group'].toString() : (bloodGroup ?? 'O+'),
+        bloodGroup: u != null && u['blood_group'] != null ? u['blood_group'].toString() : (bloodGroup ?? ''),
         emergencyNotes: u != null && u['emergency_notes'] != null ? u['emergency_notes'].toString() : (emergencyNotes ?? ''),
       );
 
@@ -293,6 +295,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final tenDigit = cleanPhone.length >= 10
         ? cleanPhone.substring(cleanPhone.length - 10)
         : cleanPhone;
+    if (tenDigit.length != 10) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Please enter a valid 10-digit mobile number.',
+      );
+      return false;
+    }
     final formattedPhone = '+91 $tenDigit';
 
     // 1. Check local storage
@@ -326,41 +335,51 @@ class AuthNotifier extends StateNotifier<AuthState> {
         ? trimmedInputName
         : (existing != null && existing.name.trim().isNotEmpty ? existing.name.trim() : '');
 
-    final user = UserModel(
-      id: existing?.id ?? 'usr-${DateTime.now().millisecondsSinceEpoch}',
-      name: resolvedName,
-      phone: formattedPhone,
-      bloodGroup: existing?.bloodGroup,
-      emergencyNotes: existing?.emergencyNotes,
-    );
+    // Authenticate directly against Laravel dispatch backend to obtain a real token
+    try {
+      final res = await _apiClient.loginUser(
+        tenDigit,
+        name: resolvedName.isNotEmpty ? resolvedName : null,
+      );
+      if (res['status'] == 'success') {
+        final u = res['user'] is Map ? res['user'] as Map : null;
+        final serverUser = UserModel(
+          id: (u?['id'] ?? existing?.id ?? 'usr-$tenDigit').toString(),
+          name: (u?['name']?.toString().trim().isNotEmpty == true)
+              ? u!['name'].toString().trim()
+              : resolvedName,
+          phone: (u?['phone'] ?? formattedPhone).toString(),
+          bloodGroup: u?['blood_group']?.toString() ?? existing?.bloodGroup,
+          emergencyNotes: u?['emergency_notes']?.toString() ?? existing?.emergencyNotes,
+        );
 
-    await _storageService.saveUser(user);
-    await _storageService.saveRegisteredUserByPhone(user);
-    await _storageService.saveLastRegisteredPhone(tenDigit);
-    await _storageService.saveToken('token_$tenDigit');
+        await _storageService.saveUser(serverUser);
+        await _storageService.saveRegisteredUserByPhone(serverUser);
+        await _storageService.saveLastRegisteredPhone(tenDigit);
+        if (res['token'] != null && res['token'].toString().isNotEmpty) {
+          await _storageService.saveToken(res['token'].toString());
+        }
 
-    state = state.copyWith(
-      user: user,
-      currentPhone: formattedPhone,
-      isLoading: false,
-      isOtpSent: false,
-    );
-
-    // Sync with backend API only if name is non-empty so we never overwrite an existing name with blank
-    if (resolvedName.isNotEmpty) {
-      try {
-        await _apiClient.updateProfile({
-          'phone': formattedPhone,
-          'name': resolvedName,
-          if (user.bloodGroup != null && user.bloodGroup!.isNotEmpty)
-            'blood_group': user.bloodGroup,
-          if (user.emergencyNotes != null && user.emergencyNotes!.isNotEmpty)
-            'emergency_notes': user.emergencyNotes,
-        });
-      } catch (_) {}
+        state = state.copyWith(
+          user: serverUser,
+          currentPhone: serverUser.phone,
+          isLoading: false,
+          isOtpSent: false,
+        );
+        return true;
+      }
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: res['message']?.toString() ?? 'Unable to verify user session.',
+      );
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Unable to reach dispatch server. Check your connection.',
+      );
+      return false;
     }
-
-    return true;
   }
 
   /// 1-Tap Emergency Quick Access using genuine recognized SIM mobile number (Immediate SOS)
@@ -368,53 +387,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String genuineSimPhone,
     String? callerName,
   }) async {
-    final cleanDigits = genuineSimPhone.replaceAll(RegExp(r'\D'), '');
-    if (cleanDigits.length < 10) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: 'Valid 10-digit SIM mobile number required for emergency ambulance dispatch.',
-      );
-      return false;
-    }
-
-    final last10 = cleanDigits.substring(cleanDigits.length - 10);
-    final normalizedPhone = '+91 $last10';
-
-    state = state.copyWith(isLoading: true, errorMessage: null);
-    final emergencyId = 'emergency-${DateTime.now().millisecondsSinceEpoch % 100000}';
-    final resolvedName = (callerName != null && callerName.trim().isNotEmpty)
-        ? callerName.trim()
-        : 'Emergency Caller';
-
-    final emergencyUser = UserModel(
-      id: emergencyId,
-      name: resolvedName,
-      phone: normalizedPhone,
-      bloodGroup: null,
-      emergencyNotes: 'Immediate 108 Emergency Dispatch Access (SIM Verified)',
-    );
-
-    await _storageService.saveUser(emergencyUser);
-    await _storageService.saveToken('token_$emergencyId');
-    await _storageService.saveLastRegisteredPhone(normalizedPhone);
-
-    state = state.copyWith(
-      user: emergencyUser,
-      currentPhone: normalizedPhone,
-      isLoading: false,
-      isOtpSent: false,
-    );
-
-    if (!_storageService.isDemoMode()) {
-      try {
-        await _apiClient.updateProfile({
-          'phone': normalizedPhone,
-          'name': resolvedName,
-        });
-      } catch (_) {}
-    }
-
-    return true;
+    return signInWithPhoneNumber(genuineSimPhone, name: callerName);
   }
 
   /// 1-Tap Sign In for already registered user without repeating registration
@@ -424,18 +397,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return true;
   }
 
-  /// Send Phone OTP (Both Real SMS Gateway & Local Verification)
+  /// Send Phone OTP via Dispatch Server
   Future<bool> sendOtp(String phone, {String? customOtp}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final res = await _apiClient.sendOtp(phone);
       if (res['status'] == 'success') {
         final serverOtp = (res['verification_code'] ?? res['dev_otp'] ?? res['otp'])?.toString();
-        final code = customOtp ??
-            serverOtp ??
-            (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+        final code = customOtp ?? serverOtp ?? '';
 
-        if (res['sms_dispatched'] != true) {
+        if (res['sms_dispatched'] != true && code.isNotEmpty) {
           final currentKey = state.smsApiKey ?? _storageService.getSmsApiKey();
           await SmsOtpService.sendRealOtpSms(
             phone: phone,
@@ -447,7 +418,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isLoading: false,
           isOtpSent: true,
           currentPhone: phone,
-          lastGeneratedOtp: code,
+          lastGeneratedOtp: code.isNotEmpty ? code : null,
           resendCountdown: AppConstants.otpTimeoutSeconds,
           resendAttempts: state.resendAttempts + 1,
         );
@@ -545,21 +516,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Proceed as Guest for Immediate Emergency (Prompt requirement)
-  void continueAsGuest() {
-    final existingUser = _storageService.getUser();
-    final guestUser = UserModel(
-      id: existingUser?.id.isNotEmpty == true ? existingUser!.id : 'guest-${DateTime.now().millisecondsSinceEpoch}',
-      name: (existingUser?.name.isNotEmpty == true) ? existingUser!.name : 'Emergency Guest',
-      phone: (existingUser?.phone.isNotEmpty == true) ? existingUser!.phone : (state.currentPhone ?? ''),
-      bloodGroup: existingUser?.bloodGroup,
-      emergencyNotes: existingUser?.emergencyNotes,
-      isGuest: true,
-    );
-    _storageService.saveUser(guestUser);
-    state = state.copyWith(user: guestUser);
-  }
-
   /// Update User Profile permanently
   Future<void> updateProfile({
     required String name,
@@ -583,11 +539,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storageService.saveUser(updated);
     await _storageService.saveRegisteredUserByPhone(updated);
 
-    if (!_storageService.isDemoMode()) {
-      try {
-        await _apiClient.updateProfile(updated.toJson());
-      } catch (_) {}
-    }
+    try {
+      await _apiClient.updateProfile(updated.toJson());
+    } catch (_) {}
 
     state = state.copyWith(user: updated);
   }

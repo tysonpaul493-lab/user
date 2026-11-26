@@ -447,166 +447,32 @@ class ApiClient {
     return [];
   }
 
-  /// Filter hospitals by medical category while always keeping Government hospital #1
+  /// Sort hospitals by genuine surrounding distance while prioritizing nearby Government hospitals
   List<Map<String, dynamic>> _filterAndSortHospitals(
     List<Map<String, dynamic>> list,
     String? category,
   ) {
-    if (category == null || category.isEmpty || category == 'All') {
-      list.sort((a, b) {
-        final aGov = _isGovernment(a['name']?.toString() ?? '');
-        final bGov = _isGovernment(b['name']?.toString() ?? '');
-        if (aGov && !bGov) return -1;
-        if (!aGov && bGov) return 1;
-        final distA = (a['distance_km'] as num?)?.toDouble() ?? 999999.0;
-        final distB = (b['distance_km'] as num?)?.toDouble() ?? 999999.0;
-        return distA.compareTo(distB);
-      });
-      return list;
-    }
-
-    final catLower = category.toLowerCase();
-    final filtered = list.where((h) {
-      final name = (h['name'] ?? '').toString().toLowerCase();
-      // Government hospitals have all emergency departments
-      if (_isGovernment(name)) return true;
-
-      final services =
-          (h['emergency_services'] as List<dynamic>?)
-              ?.map((e) => e.toString().toLowerCase())
-              .toList() ??
-          [];
-
-      if (catLower.contains('cardiac') || catLower.contains('heart')) {
-        return services.any(
-              (s) =>
-                  s.contains('cardiac') ||
-                  s.contains('cath lab') ||
-                  s.contains('ccu'),
-            ) ||
-            name.contains('cardiac') ||
-            name.contains('gknm') ||
-            name.contains('ramakrishna') ||
-            name.contains('kmch') ||
-            name.contains('richmond') ||
-            name.contains('kg');
-      } else if (catLower.contains('trauma') || catLower.contains('accident')) {
-        return h['has_trauma_center'] == true ||
-            services.any(
-              (s) =>
-                  s.contains('trauma') ||
-                  s.contains('casualty') ||
-                  s.contains('ortho'),
-            ) ||
-            name.contains('trauma') ||
-            name.contains('ganga') ||
-            name.contains('kmch') ||
-            name.contains('ashwin') ||
-            name.contains('richmond');
-      } else if (catLower.contains('breath') || catLower.contains('air')) {
-        return services.any(
-              (s) =>
-                  s.contains('pulmonary') ||
-                  s.contains('icu') ||
-                  s.contains('ventilator'),
-            ) ||
-            name.contains('psg') ||
-            name.contains('kmch') ||
-            name.contains('ramakrishna');
-      } else if (catLower.contains('maternity') ||
-          catLower.contains('pregnan')) {
-        return services.any(
-              (s) =>
-                  s.contains('maternity') ||
-                  s.contains('delivery') ||
-                  s.contains('neonatal'),
-            ) ||
-            name.contains('gknm') ||
-            name.contains('psg') ||
-            name.contains('masonic') ||
-            name.contains('esi');
-      } else if (catLower.contains('stroke') || catLower.contains('neuro')) {
-        return services.any(
-              (s) =>
-                  s.contains('stroke') ||
-                  s.contains('thrombolysis') ||
-                  s.contains('neuro'),
-            ) ||
-            name.contains('stroke') ||
-            name.contains('kg') ||
-            name.contains('kmch') ||
-            name.contains('royal care') ||
-            name.contains('ramakrishna');
-      } else if (catLower.contains('pediatric') || catLower.contains('child')) {
-        return services.any(
-              (s) =>
-                  s.contains('pediatric') ||
-                  s.contains('picu') ||
-                  s.contains('nicu') ||
-                  s.contains('neonatal'),
-            ) ||
-            name.contains('ramakrishna') ||
-            name.contains('masonic') ||
-            name.contains('psg') ||
-            name.contains('gknm');
-      } else if (catLower.contains('burn')) {
-        return services.any(
-              (s) => s.contains('burn') || s.contains('plastic'),
-            ) ||
-            name.contains('ganga') ||
-            name.contains('cmch');
-      } else if (catLower.contains('poison') || catLower.contains('snake')) {
-        return services.any(
-              (s) =>
-                  s.contains('poison') ||
-                  s.contains('toxicology') ||
-                  s.contains('antivenom'),
-            ) ||
-            name.contains('cmch') ||
-            name.contains('kg');
-      } else if (catLower.contains('senior') ||
-          catLower.contains('geriatric') ||
-          catLower.contains('elder')) {
-        return services.any(
-              (s) =>
-                  s.contains('icu') ||
-                  s.contains('cardiac') ||
-                  s.contains('emergency') ||
-                  s.contains('dialysis'),
-            ) ||
-            name.contains('cmch') ||
-            name.contains('kg') ||
-            name.contains('ramakrishna') ||
-            name.contains('gknm') ||
-            name.contains('psg');
-      }
-
-      return true;
-    }).toList();
-
-    // 1st Priority: Government Hospital #1 at the top of the list!
-    // 2nd Priority: Nearest distance in km
-    filtered.sort((a, b) {
-      final aGov = _isGovernment(a['name']?.toString() ?? '');
-      final bGov = _isGovernment(b['name']?.toString() ?? '');
-      if (aGov && !bGov) return -1;
-      if (!aGov && bGov) return 1;
+    list.sort((a, b) {
       final distA = (a['distance_km'] as num?)?.toDouble() ?? 999999.0;
       final distB = (b['distance_km'] as num?)?.toDouble() ?? 999999.0;
+      final aGov = _isGovernment(a['name']?.toString() ?? '') && distA <= 25.0;
+      final bGov = _isGovernment(b['name']?.toString() ?? '') && distB <= 25.0;
+      if (aGov && !bGov) return -1;
+      if (!aGov && bGov) return 1;
       return distA.compareTo(distB);
     });
-
-    return filtered.isNotEmpty ? filtered : list;
+    return list;
   }
 
   bool _isGovernment(String name) {
     final lower = name.toLowerCase();
     return lower.contains('government') ||
+        lower.contains('govt') ||
+        lower.contains('general hospital') ||
+        lower.contains('medical college') ||
+        lower.contains('district hospital') ||
+        lower.contains('taluk') ||
         lower.contains('cmch') ||
-        lower.contains('esi') ||
-        lower.contains('gh') ||
-        lower.contains('rajiv gandhi') ||
-        lower.contains('stanley') ||
-        lower.contains('omandurar');
+        lower.contains('esi');
   }
 }

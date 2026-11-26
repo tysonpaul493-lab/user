@@ -263,7 +263,6 @@ class AppConstants {
   static const String userKey = 'lr_user_data';
   static const String localeKey = 'lr_locale_pref';
   static const String emergencyContactsKey = 'lr_emergency_contacts';
-  static const String demoModeKey = 'lr_demo_mode_active';
   static const String smsApiKeyStorageKey = 'lr_sms_api_key';
   static const String bookingHistoryKey = 'lr_booking_history';
 
@@ -278,8 +277,8 @@ class AppConstants {
   static const int otpTimeoutSeconds = 60;
   static const int maxOtpResendAttempts = 3;
 
-  // Default Coordinates (Live GPS anchor)
-  static const double defaultLat = 11.0318; // Kovilmedu, Coimbatore
-  static const double defaultLng = 76.9437;
+  // Unset Default Coordinates (No fake GPS anchor; requires live GPS fix)
+  static const double defaultLat = 0.0;
+  static const double defaultLng = 0.0;
   static const String defaultLocationName = 'Locating Current GPS Position...';
 }

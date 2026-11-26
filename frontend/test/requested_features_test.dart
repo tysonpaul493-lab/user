@@ -340,21 +340,19 @@ void main() {
     });
 
     testWidgets(
-      '10. Emergency 1-Tap Login, no server connection icon, and history deduplication',
+      '10. Login screen checks, input validation, and history deduplication',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final storage = await StorageService.init();
-        await storage.setDemoMode(true);
         final apiClient = ApiClient(storage);
         final authNotifier = AuthNotifier(apiClient, storage);
 
-        // Verify Emergency 1-Tap Guest Access with genuine recognized SIM number
-        final emergencySuccess = await authNotifier.signInAsEmergencyGuest(
-          genuineSimPhone: '+91 98428 30451',
+        // Invalid short phone must be rejected cleanly without creating a fake session
+        final invalidSuccess = await authNotifier.signInAsEmergencyGuest(
+          genuineSimPhone: '123',
         );
-        expect(emergencySuccess, isTrue);
-        expect(authNotifier.state.user?.name, 'Emergency Caller');
-        expect(authNotifier.state.user?.phone, '+91 9842830451');
+        expect(invalidSuccess, isFalse);
+        expect(authNotifier.state.user, isNull);
 
         // Verify LoginScreen has 1-Tap Emergency Access removed and NO dns_rounded icon
         await tester.pumpWidget(

@@ -162,109 +162,12 @@ class LocationService {
     }
   }
 
-  /// Resolve exact human-readable street/locality from coordinates even when offline
-  static Map<String, String> resolveOfflineAddress(double lat, double lng) {
-    // 1. Coimbatore region (10.75 <= lat <= 11.25 && 76.75 <= lng <= 77.25)
-    if (lat >= 10.75 && lat <= 11.25 && lng >= 76.75 && lng <= 77.25) {
-      if (lat >= 11.025 && lat <= 11.045 && lng >= 76.930 && lng <= 76.955) {
-        return {
-          'shortAddress': 'Door No. 12/4, Saibaba Colony, Coimbatore District',
-          'fullAddress': 'Door No. 12/4, NSR Cross Road, Saibaba Colony, Coimbatore District, Tamil Nadu - 641011',
-        };
-      } else if (lat >= 11.015 && lat <= 11.035 && lng >= 76.920 && lng <= 76.950) {
-        return {
-          'shortAddress': 'Door No. 42, Saibaba Colony, Coimbatore District',
-          'fullAddress': 'Door No. 42, Alagesan Road, Saibaba Colony, Coimbatore District, Tamil Nadu - 641011',
-        };
-      } else if (lat >= 11.010 && lat <= 11.030 && lng >= 76.950 && lng <= 76.980) {
-        return {
-          'shortAddress': 'Door No. 85, Gandhipuram Colony, Coimbatore District',
-          'fullAddress': 'Door No. 85, 7th Cross Street, Gandhipuram Colony, Coimbatore District, Tamil Nadu - 641012',
-        };
-      } else if (lat >= 11.020 && lat <= 11.050 && lng >= 76.980 && lng <= 77.050) {
-        return {
-          'shortAddress': 'Door No. 104, Peelamedu Colony, Coimbatore District',
-          'fullAddress': 'Door No. 104, Avinashi Road, Peelamedu Colony, Coimbatore District, Tamil Nadu - 641004',
-        };
-      } else if (lat >= 10.980 && lat <= 11.020 && lng >= 77.000 && lng <= 77.050) {
-        return {
-          'shortAddress': 'Door No. 34, Singanallur Colony, Coimbatore District',
-          'fullAddress': 'Door No. 34, Trichy Road, Singanallur Colony, Coimbatore District, Tamil Nadu - 641005',
-        };
-      } else if (lat >= 10.980 && lat <= 11.015 && lng >= 76.950 && lng <= 76.980) {
-        return {
-          'shortAddress': 'Door No. 19, Town Hall, Coimbatore District',
-          'fullAddress': 'Door No. 19, Big Bazaar Street, Town Hall, Coimbatore District, Tamil Nadu - 641001',
-        };
-      } else {
-        return {
-          'shortAddress': 'Door No. 55, Central Colony, Coimbatore District',
-          'fullAddress': 'Door No. 55, Collectorate Road, Central Colony, Coimbatore District, Tamil Nadu - 641018',
-        };
-      }
-    }
-
-    // 2. Chennai region (12.8 <= lat <= 13.3 && 80.0 <= lng <= 80.4)
-    if (lat >= 12.8 && lat <= 13.3 && lng >= 80.0 && lng <= 80.4) {
-      return {
-        'shortAddress': 'Door No. 22, Anna Nagar Colony, Chennai District',
-        'fullAddress': 'Door No. 22, 2nd Avenue, Anna Nagar Colony, Chennai District, Tamil Nadu - 600040',
-      };
-    }
-
-    // 3. Madurai region (9.8 <= lat <= 10.1 && 78.0 <= lng <= 78.3)
-    if (lat >= 9.8 && lat <= 10.1 && lng >= 78.0 && lng <= 78.3) {
-      return {
-        'shortAddress': 'Door No. 18, KK Nagar Colony, Madurai District',
-        'fullAddress': 'Door No. 18, Main Road, KK Nagar Colony, Madurai District, Tamil Nadu - 625020',
-      };
-    }
-
-    // 4. Tiruppur region (11.0 <= lat <= 11.2 && 77.25 <= lng <= 77.45)
-    if (lat >= 11.0 && lat <= 11.2 && lng >= 77.25 && lng <= 77.45) {
-      return {
-        'shortAddress': 'Door No. 29, Rayapuram Colony, Tiruppur District',
-        'fullAddress': 'Door No. 29, Kumaran Road, Rayapuram Colony, Tiruppur District, Tamil Nadu - 641601',
-      };
-    }
-
-    // 5. Salem region (11.55 <= lat <= 11.75 && 78.05 <= lng <= 78.25)
-    if (lat >= 11.55 && lat <= 11.75 && lng >= 78.05 && lng <= 78.25) {
-      return {
-        'shortAddress': 'Door No. 45, Fairlands Colony, Salem District',
-        'fullAddress': 'Door No. 45, Brindavan Road, Fairlands Colony, Salem District, Tamil Nadu - 636016',
-      };
-    }
-
-    // 6. Trichy region (10.75 <= lat <= 10.90 && 78.60 <= lng <= 78.80)
-    if (lat >= 10.75 && lat <= 10.90 && lng >= 78.60 && lng <= 78.80) {
-      return {
-        'shortAddress': 'Door No. 15, Thillai Nagar Colony, Tiruchirappalli District',
-        'fullAddress': 'Door No. 15, 11th Cross Street, Thillai Nagar Colony, Tiruchirappalli District, Tamil Nadu - 620018',
-      };
-    }
-
-    // 7. Bengaluru region (12.85 <= lat <= 13.15 && 77.45 <= lng <= 77.75)
-    if (lat >= 12.85 && lat <= 13.15 && lng >= 77.45 && lng <= 77.75) {
-      return {
-        'shortAddress': 'Door No. 56, Indiranagar Colony, Bengaluru Urban District',
-        'fullAddress': 'Door No. 56, 100 Feet Road, Indiranagar Colony, Bengaluru Urban District, Karnataka - 560038',
-      };
-    }
-
-    // Dynamic fallback for any coordinate outside cached areas
-    final doorNumber = 'Door No. ${((lat * 1000).abs().toInt() % 75) + 1}';
-    return {
-      'shortAddress': '$doorNumber, Local Area, District (${lat.toStringAsFixed(2)}, ${lng.toStringAsFixed(2)})',
-      'fullAddress': '$doorNumber, Resident Colony, Main Road, Local District - GPS (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})',
-    };
-  }
-
-  /// Reverse geocode coordinates to human-readable street and locality (No fake defaults)
+  /// Reverse geocode coordinates using genuine map providers without fabricated addresses
   static Future<Map<String, String>> reverseGeocode(double lat, double lng) async {
-    final offlineAddress = resolveOfflineAddress(lat, lng);
+    final coordShort = 'GPS (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
+    final coordFull = 'Live Coordinates: ${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
 
-    // 1. Primary: Ultra-fast Komoot Photon Reverse Geocoder (Global OSM data with sub-300ms latency)
+    // 1. Primary: Komoot Photon Reverse Geocoder
     try {
       final photonUrl = 'https://photon.komoot.io/reverse?lat=$lat&lon=$lng';
       final response = await _dio.get(
@@ -282,9 +185,9 @@ class LocationService {
           final props = features.first['properties'] as Map<String, dynamic>?;
           if (props != null) {
             final explicitHouse = props['housenumber']?.toString() ?? props['house_number']?.toString();
-            final doorNumber = explicitHouse != null && explicitHouse.isNotEmpty
-                ? 'Door No. $explicitHouse'
-                : 'Door No. ${((lat * 1000).abs().toInt() % 85) + 1}';
+            final doorNumber = (explicitHouse != null && explicitHouse.trim().isNotEmpty)
+                ? explicitHouse.trim()
+                : null;
 
             final street = props['street']?.toString() ?? props['name']?.toString();
             final colony = props['district']?.toString() ?? props['locality']?.toString();
@@ -295,33 +198,33 @@ class LocationService {
                 district = '$district District';
               }
             } else if (city != null && city.isNotEmpty) {
-              district = '$city District';
+              district = city;
             }
 
             final state = props['state']?.toString();
             final postcode = props['postcode']?.toString();
 
-            // Construct granular address containing House No, Colony, Street, District
-            final shortParts = [doorNumber, colony ?? street, district ?? city].where((e) => e != null && e.isNotEmpty).toList();
+            final shortParts = [doorNumber, colony ?? street, district ?? city]
+                .where((e) => e != null && e.trim().isNotEmpty)
+                .toList();
             final fullParts = [
-              doorNumber,
-              if (colony != null && colony.isNotEmpty) colony,
-              if (street != null && street.isNotEmpty && street != colony) street,
-              if (district != null && district.isNotEmpty) district,
-              if (city != null && city.isNotEmpty && city != district) city,
-              if (state != null && state.isNotEmpty)
-                postcode != null && postcode.isNotEmpty ? '$state - $postcode' : state
-              else if (postcode != null && postcode.isNotEmpty)
+              if (doorNumber != null) doorNumber,
+              if (colony != null && colony.trim().isNotEmpty) colony,
+              if (street != null && street.trim().isNotEmpty && street != colony) street,
+              if (district != null && district.trim().isNotEmpty) district,
+              if (city != null && city.trim().isNotEmpty && city != district) city,
+              if (state != null && state.trim().isNotEmpty)
+                postcode != null && postcode.trim().isNotEmpty ? '$state - $postcode' : state
+              else if (postcode != null && postcode.trim().isNotEmpty)
                 postcode,
             ].where((e) => e.toString().trim().isNotEmpty).toList();
 
-            final short = shortParts.isNotEmpty ? shortParts.join(', ') : offlineAddress['shortAddress']!;
-            final full = fullParts.isNotEmpty ? fullParts.join(', ') : offlineAddress['fullAddress']!;
-
-            return {
-              'shortAddress': short,
-              'fullAddress': full,
-            };
+            if (shortParts.isNotEmpty || fullParts.isNotEmpty) {
+              return {
+                'shortAddress': shortParts.isNotEmpty ? shortParts.join(', ') : fullParts.join(', '),
+                'fullAddress': fullParts.isNotEmpty ? fullParts.join(', ') : shortParts.join(', '),
+              };
+            }
           }
         }
       }
@@ -335,7 +238,7 @@ class LocationService {
       final response = await _dio.get(
         url,
         options: Options(
-          headers: {'User-Agent': 'A2IEmergencyApp/1.0 (contact@a2i.org)'},
+          headers: {'User-Agent': 'LifeRouteEmergencyApp/1.0'},
           receiveTimeout: const Duration(seconds: 5),
           sendTimeout: const Duration(seconds: 4),
         ),
@@ -347,9 +250,9 @@ class LocationService {
 
         if (addressMap != null) {
           final explicitHouse = addressMap['house_number']?.toString() ?? addressMap['building']?.toString();
-          final doorNumber = explicitHouse != null && explicitHouse.isNotEmpty
-              ? 'Door No. $explicitHouse'
-              : 'Door No. ${((lat * 1000).abs().toInt() % 85) + 1}';
+          final doorNumber = (explicitHouse != null && explicitHouse.trim().isNotEmpty)
+              ? explicitHouse.trim()
+              : null;
 
           final road = addressMap['road'] ?? addressMap['street'] ?? addressMap['pedestrian'];
           final colony = addressMap['suburb'] ?? addressMap['neighbourhood'] ?? addressMap['residential'] ?? addressMap['colony'] ?? addressMap['subdivision'];
@@ -361,14 +264,16 @@ class LocationService {
               district = '$dStr District';
             }
           } else if (city != null) {
-            district = '$city District';
+            district = city;
           }
           final state = addressMap['state'];
           final postcode = addressMap['postcode'];
 
-          final shortParts = [doorNumber, colony ?? road, district ?? city].where((e) => e != null && e.toString().isNotEmpty).toList();
+          final shortParts = [doorNumber, colony ?? road, district ?? city]
+              .where((e) => e != null && e.toString().trim().isNotEmpty)
+              .toList();
           final fullParts = [
-            doorNumber,
+            if (doorNumber != null) doorNumber,
             if (colony != null) colony.toString(),
             if (road != null && road != colony) road.toString(),
             if (district != null) district.toString(),
@@ -379,21 +284,22 @@ class LocationService {
               postcode.toString(),
           ].where((e) => e.toString().trim().isNotEmpty).toList();
 
-          final short = shortParts.isNotEmpty ? shortParts.join(', ') : offlineAddress['shortAddress']!;
-          final full = fullParts.isNotEmpty ? fullParts.join(', ') : offlineAddress['fullAddress']!;
-
-          return {
-            'shortAddress': short,
-            'fullAddress': full,
-          };
+          if (shortParts.isNotEmpty || fullParts.isNotEmpty) {
+            return {
+              'shortAddress': shortParts.isNotEmpty ? shortParts.join(', ') : fullParts.join(', '),
+              'fullAddress': fullParts.isNotEmpty ? fullParts.join(', ') : shortParts.join(', '),
+            };
+          }
         }
       }
     } catch (e) {
       debugPrint('Nominatim reverse geocode failed: $e');
     }
 
-    // 3. Fallback: Accurate regional coordinate resolver (Dynamic coordinates)
-    return offlineAddress;
+    return {
+      'shortAddress': coordShort,
+      'fullAddress': coordFull,
+    };
   }
 
   /// Open device GPS or app permission settings

@@ -208,7 +208,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
     final effectivePhone = '+91 $digits';
     final nameInput = _nameController.text.trim();
-    final callerName = nameInput.isNotEmpty ? nameInput : 'Emergency Caller';
+    final callerName = nameInput.isNotEmpty ? nameInput : null;
 
     final success =
         await ref.read(authProvider.notifier).signInAsEmergencyGuest(

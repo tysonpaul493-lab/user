@@ -100,15 +100,6 @@ class StorageService {
     return prefs.getString(AppConstants.localeKey) ?? 'en';
   }
 
-  // Demo Mode (disabled by default so live server dispatch is always enforced)
-  bool isDemoMode() {
-    return prefs.getBool(AppConstants.demoModeKey) ?? false;
-  }
-
-  Future<void> setDemoMode(bool enabled) async {
-    await prefs.setBool(AppConstants.demoModeKey, enabled);
-  }
-
   // Emergency Contacts
   Future<void> saveEmergencyContacts(List<EmergencyContactModel> contacts) async {
     final list = contacts.map((c) => c.toJson()).toList();

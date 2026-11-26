@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/services/location_service.dart';
 import '../../booking/providers/booking_provider.dart';
 import '../providers/hospital_provider.dart';
@@ -49,16 +48,25 @@ class _HospitalFinderScreenState extends ConsumerState<HospitalFinderScreen> {
   Widget build(BuildContext context) {
     final hospitalState = ref.watch(hospitalProvider);
     final bookingState = ref.watch(bookingProvider);
-    final userLat = (bookingState.currentLat != 0.0) ? bookingState.currentLat : AppConstants.defaultLat;
-    final userLng = (bookingState.currentLng != 0.0) ? bookingState.currentLng : AppConstants.defaultLng;
+    final userLat = (bookingState.currentLat != 0.0)
+        ? bookingState.currentLat
+        : (hospitalState.userLat ?? 0.0);
+    final userLng = (bookingState.currentLng != 0.0)
+        ? bookingState.currentLng
+        : (hospitalState.userLng ?? 0.0);
     final hospitals = [...hospitalState.filteredHospitals];
 
     // Sort strictly by live geographic distance from user current coordinates
     hospitals.sort((a, b) {
-      if (a.isGovernment && !b.isGovernment) return -1;
-      if (!a.isGovernment && b.isGovernment) return 1;
+      if (userLat == 0.0 && userLng == 0.0) {
+        return a.distanceKm.compareTo(b.distanceKm);
+      }
       final distA = LocationService.calculateDistanceKm(userLat, userLng, a.lat, a.lng);
       final distB = LocationService.calculateDistanceKm(userLat, userLng, b.lat, b.lng);
+      final aGov = a.isGovernment && distA <= 25.0;
+      final bGov = b.isGovernment && distB <= 25.0;
+      if (aGov && !bGov) return -1;
+      if (!aGov && bGov) return 1;
       return distA.compareTo(distB);
     });
 

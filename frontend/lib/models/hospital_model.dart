@@ -20,27 +20,27 @@ class HospitalModel {
     required this.distanceKm,
     required this.emergencyPhone,
     required this.emergencyServices,
-    this.hasTraumaCenter = true,
-    this.hasIcuBed = true,
-    this.estimatedDriveTime = '8 min',
+    this.hasTraumaCenter = false,
+    this.hasIcuBed = false,
+    this.estimatedDriveTime = '',
   });
 
   factory HospitalModel.fromJson(Map<String, dynamic> json) {
     return HospitalModel(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      address: json['address'] ?? '',
+      name: json['name']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
       lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
       lng: (json['lng'] as num?)?.toDouble() ?? 0.0,
-      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 1.2,
-      emergencyPhone: json['emergency_phone'] ?? '108',
+      distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0.0,
+      emergencyPhone: json['emergency_phone']?.toString() ?? '',
       emergencyServices: (json['emergency_services'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
-          ['24x7 Emergency', 'Trauma Center', 'ICU', 'Cardiac Care'],
-      hasTraumaCenter: json['has_trauma_center'] ?? true,
-      hasIcuBed: json['has_icu_bed'] ?? true,
-      estimatedDriveTime: json['estimated_drive_time'] ?? '8 min',
+          const [],
+      hasTraumaCenter: json['has_trauma_center'] == true,
+      hasIcuBed: json['has_icu_bed'] == true,
+      estimatedDriveTime: json['estimated_drive_time']?.toString() ?? '',
     );
   }
 
@@ -90,13 +90,13 @@ class HospitalModel {
 
   bool get isGovernment =>
       name.toLowerCase().contains('government') ||
+      name.toLowerCase().contains('govt') ||
+      name.toLowerCase().contains('general hospital') ||
+      name.toLowerCase().contains('medical college') ||
+      name.toLowerCase().contains('district hospital') ||
+      name.toLowerCase().contains('taluk') ||
       name.toLowerCase().contains('cmch') ||
       name.toLowerCase().contains('esi') ||
-      name.toLowerCase().contains('gh') ||
-      name.toLowerCase().contains('stanley') ||
-      name.toLowerCase().contains('rajiv gandhi') ||
-      name.toLowerCase().contains('royapettah') ||
-      name.toLowerCase().contains('kilpauk') ||
-      name.toLowerCase().contains('omandurar') ||
+      emergencyPhone == '108' ||
       emergencyServices.any((s) => s.toLowerCase().contains('108') || s.toLowerCase().contains('free'));
 }

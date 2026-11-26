@@ -38,9 +38,8 @@ class DriverModel {
       phone: (json['phone'] ?? '').toString(),
       photoUrl: json['photo_url'],
       ambulanceNumber: (json['ambulance_number'] ?? '').toString(),
-      ambulanceType: (json['ambulance_type'] ?? 'Advanced Life Support (ALS)')
-          .toString(),
-      rating: (json['rating'] as num?)?.toDouble() ?? 5.0,
+      ambulanceType: (json['ambulance_type'] ?? '').toString(),
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
       totalTrips: (json['total_trips'] as num?)?.toInt() ?? 0,
       currentLat: (json['current_lat'] as num?)?.toDouble() ?? 0.0,
       currentLng: (json['current_lng'] as num?)?.toDouble() ?? 0.0,

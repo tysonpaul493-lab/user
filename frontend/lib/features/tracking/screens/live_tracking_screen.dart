@@ -82,21 +82,26 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     super.dispose();
   }
 
-  LatLng _resolveDriverPos(dynamic driver, double userLat, double userLng) {
+  LatLng? _resolveDriverPos(dynamic driver, double userLat, double userLng) {
     if (driver != null &&
         RouteService.isValidCoordinate(
           LatLng(driver.currentLat, driver.currentLng),
         )) {
       return LatLng(driver.currentLat, driver.currentLng);
     }
-    return LatLng(userLat - 0.012, userLng - 0.008);
+    return null;
   }
 
   bool _needsRouteRefresh(
-    LatLng driverPos,
+    LatLng? driverPos,
     LatLng targetPos,
     bool isHeadingToHospital,
   ) {
+    if (driverPos == null ||
+        !RouteService.isValidCoordinate(driverPos) ||
+        !RouteService.isValidCoordinate(targetPos)) {
+      return false;
+    }
     if (_ambulanceRoadRoute == null || _ambulanceRoadRoute!.length < 2) {
       return true;
     }
@@ -125,6 +130,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     final userLat = booking?.pickupLat ?? bookingState.currentLat;
     final userLng = booking?.pickupLng ?? bookingState.currentLng;
     final driverPos = _resolveDriverPos(driver, userLat, userLng);
+    final hospital = booking?.destinationHospital;
 
     final isHeadingToHospital =
         booking?.status == BookingStatus.patientPickedUp ||
@@ -135,7 +141,28 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
       _initialFullAmbulanceRoute = null;
       _hasRealRoadRoute = false;
     }
-    final hospital = booking?.destinationHospital;
+
+    if (driverPos == null || !RouteService.isValidCoordinate(driverPos)) {
+      if (hospital != null &&
+          !isHeadingToHospital &&
+          _hospitalRoadRoute == null &&
+          RouteService.isValidCoordinate(LatLng(userLat, userLng)) &&
+          RouteService.isValidCoordinate(LatLng(hospital.lat, hospital.lng))) {
+        _isFetchingRoute = true;
+        try {
+          final hospRoute = await RouteService.getRoadRoute(
+            LatLng(userLat, userLng),
+            LatLng(hospital.lat, hospital.lng),
+          );
+          if (mounted) {
+            setState(() => _hospitalRoadRoute = hospRoute);
+          }
+        } catch (_) {} finally {
+          _isFetchingRoute = false;
+        }
+      }
+      return;
+    }
 
     final targetLat = (isHeadingToHospital && hospital != null)
         ? hospital.lat
@@ -237,6 +264,8 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
         isArrivedAtHospital || (isArrivedAtPickup && !isHeadingToHospital);
     final double remainingMeters = atCurrentStop
         ? 0.0
+        : driverPos == null
+        ? ((booking?.distanceKm ?? 0.0) * 1000.0)
         : (_ambulanceRoadRoute != null && _ambulanceRoadRoute!.length >= 2)
         ? RouteService.calculateRemainingPolylineMeters(
             _ambulanceRoadRoute!,
@@ -247,15 +276,19 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     final double liveDistanceKm = remainingMeters / 1000.0;
     final int dynamicEta = atCurrentStop
         ? 0
-        : RouteService.estimateEtaMinutes(remainingMeters);
+        : (driverPos == null
+              ? (booking?.etaMinutes ?? 0)
+              : RouteService.estimateEtaMinutes(remainingMeters));
     final double dynamicProgress = isArrivedAtHospital
         ? 1.0
-        : (atCurrentStop ? 1.0 : _calculateProgress(remainingMeters));
+        : (atCurrentStop
+              ? 1.0
+              : (driverPos == null ? 0.05 : _calculateProgress(remainingMeters)));
     final String phaseLabel = isHeadingToHospital
         ? 'To Hospital in'
         : 'Arriving in';
 
-    final List<LatLng>? displayedAmbulanceRoute = atCurrentStop
+    final List<LatLng>? displayedAmbulanceRoute = atCurrentStop || driverPos == null
         ? null
         : (_ambulanceRoadRoute != null && _ambulanceRoadRoute!.length >= 2)
         ? RouteService.trimRemainingRoute(
@@ -282,6 +315,15 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
       );
     }
 
+    final mapCenter = driverPos != null && RouteService.isValidCoordinate(targetPos)
+        ? LatLng(
+            (driverPos.latitude + routeTargetLat) / 2,
+            (driverPos.longitude + routeTargetLng) / 2,
+          )
+        : (RouteService.isValidCoordinate(LatLng(userLat, userLng))
+              ? LatLng(userLat, userLng)
+              : targetPos);
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -289,14 +331,11 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
           // 1. Interactive Map View with Real Road Pathways (OSRM)
           Positioned.fill(
             child: CustomMapWidget(
-              center: LatLng(
-                (driverPos.latitude + routeTargetLat) / 2,
-                (driverPos.longitude + routeTargetLng) / 2,
-              ),
+              center: mapCenter,
               zoom: 14.8,
               userPosition: LatLng(userLat, userLng),
               driverPosition: driverPos,
-              driverHeading: driver?.heading ?? 45.0,
+              driverHeading: driver?.heading ?? 0.0,
               routePoints: displayedAmbulanceRoute,
               hospitalPosition: booking.destinationHospital != null
                   ? LatLng(
@@ -954,9 +993,9 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   }
 
   void _shareTrackingDetails(BookingModel? booking) async {
-    final refNum = booking?.referenceNumber ?? '#LR-108';
+    final refNum = booking?.referenceNumber ?? '';
     final hospital =
-        booking?.destinationHospital?.name ?? 'Emergency Trauma Center';
+        booking?.destinationHospital?.name ?? 'Receiving Hospital';
     final pickup = booking?.pickupAddress ?? 'Live GPS Location';
     final shareText =
         '🚨 Emergency Dispatch Tracking 🚨\n'

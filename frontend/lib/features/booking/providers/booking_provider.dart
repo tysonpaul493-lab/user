@@ -41,8 +41,8 @@ class BookingState {
     this.isCreatingBooking = false,
     this.isSearching = false,
     this.errorMessage,
-    this.currentLat = AppConstants.defaultLat,
-    this.currentLng = AppConstants.defaultLng,
+    this.currentLat = 0.0,
+    this.currentLng = 0.0,
     this.currentAddress = AppConstants.defaultLocationName,
     this.currentFullAddress = 'Acquiring live GPS address...',
     this.isGpsStale = false,
@@ -106,6 +106,51 @@ class BookingNotifier extends StateNotifier<BookingState> {
     if (history.isNotEmpty) {
       state = state.copyWith(bookingHistory: history);
     }
+    _syncHistoryFromServer();
+  }
+
+  Future<void> _syncHistoryFromServer() async {
+    try {
+      final user = _storageService.getUser();
+      final phone = user?.phone.isNotEmpty == true
+          ? user!.phone
+          : _storageService.getLastRegisteredPhone();
+      if (phone == null || phone.trim().isEmpty) return;
+
+      final rawList = await _apiClient.getBookingHistory(phone: phone);
+      final parsed = rawList.map((e) => BookingModel.fromJson(e)).toList();
+      if (parsed.isEmpty) return;
+
+      const finishedStatuses = {
+        BookingStatus.tripCompleted,
+        BookingStatus.cancelled,
+        BookingStatus.noAmbulanceAvailable,
+      };
+      final activeMatch = parsed.where((b) => !finishedStatuses.contains(b.status)).toList();
+      final pastList = parsed.where((b) => finishedStatuses.contains(b.status)).toList();
+      state = state.copyWith(
+        bookingHistory: pastList.isNotEmpty ? pastList : state.bookingHistory,
+      );
+      if (pastList.isNotEmpty) {
+        await _storageService.saveBookingHistory(pastList);
+      }
+      if (activeMatch.isNotEmpty && state.activeBooking == null) {
+        final active = activeMatch.first;
+        state = state.copyWith(
+          activeBooking: active,
+          isSearching:
+              active.status == BookingStatus.findingAmbulance &&
+              active.driver == null,
+        );
+        final token = await _storageService.getToken() ?? '';
+        _reverbService.connectToBookingChannel(
+          bookingId: active.id,
+          authToken: token,
+          currentBooking: active,
+        );
+        _startActiveBookingPoller(active.id);
+      }
+    } catch (_) {}
   }
 
   Future<void> _initLocation() async {
@@ -442,8 +487,18 @@ class BookingNotifier extends StateNotifier<BookingState> {
   void _listenToReverbEvents() {
     _bookingSub = _reverbService.bookingStream.listen((updatedBooking) {
       _notifyStatusChange(updatedBooking);
-      if (updatedBooking.status == BookingStatus.tripCompleted) {
-        final updatedHistory = [updatedBooking, ...state.bookingHistory];
+      if (updatedBooking.status == BookingStatus.tripCompleted ||
+          updatedBooking.status == BookingStatus.cancelled) {
+        _activeBookingPoller?.cancel();
+        final filtered = state.bookingHistory
+            .where(
+              (b) =>
+                  b.id != updatedBooking.id &&
+                  (updatedBooking.referenceNumber.isEmpty ||
+                      b.referenceNumber != updatedBooking.referenceNumber),
+            )
+            .toList();
+        final updatedHistory = [updatedBooking, ...filtered];
         state = state.copyWith(
           clearActiveBooking: true,
           bookingHistory: updatedHistory,
@@ -454,7 +509,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
       } else {
         state = state.copyWith(
           activeBooking: updatedBooking,
-          isSearching: updatedBooking.status == BookingStatus.findingAmbulance,
+          isSearching:
+              updatedBooking.status == BookingStatus.findingAmbulance &&
+              updatedBooking.driver == null,
         );
       }
     });
@@ -524,6 +581,20 @@ class BookingNotifier extends StateNotifier<BookingState> {
       errorMessage: null,
       chatMessages: const [],
     );
+
+    if (state.currentLat == 0.0 && state.currentLng == 0.0) {
+      final loc = await refreshLiveLocation();
+      if (!loc.isAccurate || (state.currentLat == 0.0 && state.currentLng == 0.0)) {
+        state = state.copyWith(
+          isCreatingBooking: false,
+          isSearching: false,
+          errorMessage:
+              loc.errorMessage ??
+              'Unable to acquire live GPS coordinates. Please enable GPS to dispatch.',
+        );
+        return false;
+      }
+    }
 
     final user = _storageService.getUser();
     final effectivePhone =
@@ -624,31 +695,12 @@ class BookingNotifier extends StateNotifier<BookingState> {
       _storageService.saveBookingHistory(updatedHistory);
       return true;
     } catch (e) {
-      debugPrint('⚠️ [BookingProvider] Network error during cancel: $e. Cancelling locally.');
-      try {
-        _reverbService.disconnect();
-      } catch (_) {}
-      final cancelledBooking = state.activeBooking!.copyWith(
-        status: BookingStatus.cancelled,
-        cancellationReason: reason,
-      );
-      final filteredHistory = state.bookingHistory
-          .where(
-            (b) =>
-                b.id != cancelledBooking.id &&
-                (cancelledBooking.referenceNumber.isEmpty ||
-                    b.referenceNumber != cancelledBooking.referenceNumber),
-          )
-          .toList();
-      final updatedHistory = [cancelledBooking, ...filteredHistory];
+      debugPrint('⚠️ [BookingProvider] Failed to cancel booking on server: $e');
       state = state.copyWith(
-        clearActiveBooking: true,
-        isSearching: false,
-        errorMessage: null,
-        bookingHistory: updatedHistory,
+        errorMessage: 'Unable to cancel booking on server: $e',
       );
-      _storageService.saveBookingHistory(updatedHistory);
-      return true;
+      _startActiveBookingPoller(bId);
+      return false;
     }
   }
 
