@@ -22,6 +22,14 @@ class AppConstants {
     'DEFAULT_API_URL',
     defaultValue: '',
   );
+  static const String configuredWsUrl = String.fromEnvironment(
+    'DEFAULT_WS_URL',
+    defaultValue: '',
+  );
+  static const int configuredWsPort = int.fromEnvironment(
+    'DEFAULT_WS_PORT',
+    defaultValue: 0,
+  );
 
   static String? _customServerHost;
   static String? _customFullBaseUrl;
@@ -243,6 +251,12 @@ class AppConstants {
   }
   static String get defaultLocalBaseUrl => 'http://$effectiveHost:8000/api';
   static String get reverbHost {
+    if (configuredWsUrl.isNotEmpty) {
+      try {
+        final uri = Uri.parse(configuredWsUrl);
+        if (uri.host.isNotEmpty) return uri.host;
+      } catch (_) {}
+    }
     if (kIsWeb) {
       try {
         final host = Uri.base.host.trim();
@@ -251,10 +265,50 @@ class AppConstants {
         }
       } catch (_) {}
     }
+    final apiBase = defaultBaseUrl;
+    if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
+      try {
+        final host = Uri.parse(apiBase).host.trim();
+        if (host.isNotEmpty) {
+          return host == 'localhost' ? '127.0.0.1' : host;
+        }
+      } catch (_) {}
+    }
     return effectiveHost == 'localhost' || effectiveHost == '127.0.0.1' ? '127.0.0.1' : effectiveHost;
   }
-  static int get reverbPort => 8080;
-  static bool get reverbUseTls => false;
+  static int get reverbPort {
+    if (configuredWsPort > 0) return configuredWsPort;
+    if (configuredWsUrl.isNotEmpty) {
+      try {
+        final uri = Uri.parse(configuredWsUrl);
+        if (uri.hasPort) return uri.port;
+      } catch (_) {}
+    }
+    if (reverbUseTls) return 443;
+    if (kIsWeb) {
+      try {
+        if (Uri.base.hasPort && Uri.base.port != 80 && Uri.base.port != 443) {
+          return Uri.base.port == 3003 ? 8080 : Uri.base.port;
+        }
+      } catch (_) {}
+    }
+    return 8080;
+  }
+  static bool get reverbUseTls {
+    if (configuredWsUrl.startsWith('wss://') || configuredWsUrl.startsWith('https://')) {
+      return true;
+    }
+    if (kIsWeb && Uri.base.scheme == 'https') {
+      return true;
+    }
+    if (_customFullBaseUrl != null && _customFullBaseUrl!.startsWith('https://')) {
+      return true;
+    }
+    if (configuredApiUrl.startsWith('https://')) {
+      return true;
+    }
+    return false;
+  }
   static const String reverbAppKey = 'liferoute_reverb_key';
 
   // Storage Keys

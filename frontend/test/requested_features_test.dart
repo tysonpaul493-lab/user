@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -366,7 +367,45 @@ void main() {
         );
 
         expect(find.text('🚨 1-Tap Emergency Access'), findsNothing);
+        expect(find.text('Instant 1-Tap Emergency SOS (Skip Login)'), findsNothing);
         expect(find.byIcon(Icons.dns_rounded), findsNothing);
+
+        // Verify live MethodChannel SIM mismatch blocks typing invalid SIM number in real time
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.liferoute.emergency/sim_info'),
+          (MethodCall call) async {
+            if (call.method == 'requestSimPermission') return true;
+            if (call.method == 'getSimInfo') {
+              return {
+                'hasSim': true,
+                'hasPermission': true,
+                'hasNumbersPermission': true,
+                'simNumber': '+91 9840010801',
+                'simNumbers': ['+919840010801'],
+                'carrier': 'Airtel',
+                'carriers': ['Airtel'],
+                'simCount': 1,
+              };
+            }
+            return null;
+          },
+        );
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(
+            const MethodChannel('com.liferoute.emergency/sim_info'),
+            null,
+          );
+        });
+
+        await tester.enterText(find.byType(TextField).last, '9888877777');
+        await tester.pumpAndSettle();
+        expect(find.textContaining('SIM card mismatch'), findsOneWidget);
+
+        await tester.enterText(find.byType(TextField).last, '9840010801');
+        await tester.pumpAndSettle();
+        expect(find.textContaining('SIM card mismatch'), findsNothing);
 
         // Verify StorageService deduplicates repeated trips in history
         final sampleBooking = BookingModel(

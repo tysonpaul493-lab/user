@@ -15,7 +15,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with WidgetsBindingObserver {
   // Input Controllers - Name and Phone only
   final _nameController = TextEditingController();
   final _loginPhoneController = TextEditingController();
@@ -23,12 +24,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _errorMessage;
   String? _successMessage;
   bool _isFraudDetected = false;
+  bool _isSimMismatch = false;
+  int _simCheckToken = 0;
   SimInfoResult? _detectedSimInfo;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    SimDetectionService.setSimChangedListener((info) {
+      if (!mounted) return;
+      _applySimSnapshot(info);
+    });
     _initSimAndUserData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _refreshSimState();
+    }
+  }
+
+  Future<void> _refreshSimState() async {
+    try {
+      final simInfo = await SimDetectionService.detectSimInfo();
+      if (!mounted) return;
+      _applySimSnapshot(simInfo);
+    } catch (_) {}
+  }
+
+  void _applySimSnapshot(SimInfoResult simInfo) {
+    setState(() {
+      _detectedSimInfo = simInfo;
+      if (_loginPhoneController.text.isEmpty && simInfo.simNumber != null) {
+        final digits = simInfo.simNumber!.replaceAll(RegExp(r'\D'), '');
+        if (digits.length >= 10) {
+          _loginPhoneController.text = digits.substring(digits.length - 10);
+        }
+      }
+    });
+    final currentDigits = _loginPhoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (currentDigits.length == 10) {
+      _verifyEnteredSimRealtime(currentDigits);
+    }
   }
 
   Future<void> _initSimAndUserData() async {
@@ -46,35 +85,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     }
 
-    // Detect hardware SIM info from Android TelephonyManager/SubscriptionManager
+    // Request SIM runtime permission cleanly and detect hardware SIM in real time
     try {
+      await SimDetectionService.requestSimPermission();
       final simInfo = await SimDetectionService.detectSimInfo();
       if (mounted) {
-        setState(() {
-          _detectedSimInfo = simInfo;
-          // Auto-fill phone field if hardware identified SIM number and field is currently empty
-          if (_loginPhoneController.text.isEmpty && simInfo.simNumber != null) {
-            final digits = simInfo.simNumber!.replaceAll(RegExp(r'\D'), '');
-            if (digits.length >= 10) {
-              _loginPhoneController.text = digits.substring(digits.length - 10);
-            }
-          }
-        });
+        _applySimSnapshot(simInfo);
       }
     } catch (_) {}
   }
 
+  Future<void> _verifyEnteredSimRealtime(String digits) async {
+    final token = ++_simCheckToken;
+    final isTamil = ref.read(authProvider).selectedLocale == 'ta';
+    final res = await SimDetectionService.verifyDeviceSim(
+      enteredPhone: digits,
+      isTamil: isTamil,
+      requestPermissionIfNeeded: false,
+    );
+    if (!mounted || token != _simCheckToken) return;
+    setState(() {
+      if (!res.isValid) {
+        _isSimMismatch = true;
+        _errorMessage = res.errorMessage;
+        _successMessage = null;
+      } else {
+        _isSimMismatch = false;
+        _errorMessage = null;
+      }
+    });
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SimDetectionService.setSimChangedListener(null);
     _nameController.dispose();
     _loginPhoneController.dispose();
     super.dispose();
   }
 
   void _onPhoneChanged(String val) {
-    if (_errorMessage != null) {
-      setState(() => _errorMessage = null);
-    }
     final digits = val.replaceAll(RegExp(r'\D'), '');
     if (digits.length == 10) {
       final isRepeating = RegExp(r'^(\d)\1{9}$').hasMatch(digits);
@@ -83,6 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!isValidPrefix || isRepeating) {
         setState(() {
           _isFraudDetected = true;
+          _isSimMismatch = false;
           _errorMessage =
               'Invalid mobile number. Please enter a valid 10-digit Indian SIM number.';
         });
@@ -92,12 +144,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() {
         _isFraudDetected = false;
       });
+      _verifyEnteredSimRealtime(digits);
     } else {
-      if (_isFraudDetected) {
-        setState(() {
-          _isFraudDetected = false;
-        });
-      }
+      setState(() {
+        _simCheckToken++;
+        _isFraudDetected = false;
+        _isSimMismatch = false;
+        if (_errorMessage != null) _errorMessage = null;
+      });
     }
   }
 
@@ -159,10 +213,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final simResult = await SimDetectionService.verifyDeviceSim(
       enteredPhone: digits,
       isTamil: isTamil,
+      requestPermissionIfNeeded: true,
     );
 
     if (!simResult.isValid) {
       setState(() {
+        _isSimMismatch = true;
         _errorMessage = simResult.errorMessage ??
             (isTamil
                 ? 'SIM அட்டை சரிபார்ப்பு தோல்வியடைந்தது.'
@@ -171,10 +227,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
+    setState(() => _isSimMismatch = false);
+
     final success = await ref.read(authProvider.notifier).loginWithPhone(
           digits,
           name: name,
           simNumber: simResult.detectedSimNumber,
+          simNumbers: simResult.detectedSimNumbers,
+          hasSim: simResult.hasSim,
+          hasPermission: simResult.hasPermission,
           carrier: simResult.carrier,
         );
 
@@ -190,36 +251,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ? 'உள்நுழைவு தோல்வியடைந்தது. தயவுசெய்து உங்கள் SIM விவரங்களை சரிபார்க்கவும்.'
                 : 'Unable to sign in. Please verify your SIM number and try again.');
       });
-    }
-  }
-
-  void _handleEmergencyQuickAccess() async {
-    final authState = ref.read(authProvider);
-    final isTamil = authState.selectedLocale == 'ta';
-    final rawInput = _loginPhoneController.text.trim();
-    final digits = rawInput.replaceAll(RegExp(r'\D'), '');
-    if (digits.length != 10) {
-      setState(() {
-        _errorMessage = isTamil
-            ? 'செல்லுபடியாகும் 10-இலக்க மொபைல் எண்ணை உள்ளிடவும்.'
-            : 'Please enter a valid 10-digit mobile number';
-      });
-      return;
-    }
-    final effectivePhone = '+91 $digits';
-    final nameInput = _nameController.text.trim();
-    final callerName = nameInput.isNotEmpty ? nameInput : null;
-
-    final success =
-        await ref.read(authProvider.notifier).signInAsEmergencyGuest(
-              genuineSimPhone: effectivePhone,
-              callerName: callerName,
-            );
-
-    if (success && mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-      );
     }
   }
 
@@ -586,7 +617,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ],
                       ),
                       child: ElevatedButton(
-                        onPressed: authState.isLoading ? null : _handleLogin,
+                        onPressed: (authState.isLoading || _isFraudDetected || _isSimMismatch)
+                            ? null
+                            : _handleLogin,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
@@ -645,33 +678,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                   ],
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // Emergency 1-Tap SOS Access (For genuine distress)
-              Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
-                ),
-                child: TextButton.icon(
-                  onPressed: _handleEmergencyQuickAccess,
-                  icon: const Icon(Icons.emergency_rounded,
-                      color: AppColors.primaryRed, size: 20),
-                  label: Text(
-                    isTamil
-                        ? '1-தட்டு உடனடி அவசர உதவி (உள்நுழைவு தேவையில்லை)'
-                        : 'Instant 1-Tap Emergency SOS (Skip Login)',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
                 ),
               ),
 

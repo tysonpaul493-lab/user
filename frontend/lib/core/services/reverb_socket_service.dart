@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../constants/app_constants.dart';
@@ -10,6 +11,8 @@ class ReverbSocketService {
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _channelSubscription;
   String? _activeWsUrl;
+  String? _authToken;
+  List<String> _pendingChannels = const [];
   Timer? _reconnectTimer;
   Timer? _pingTimer;
   DriverModel? _lastDriver;
@@ -33,6 +36,9 @@ class ReverbSocketService {
     required BookingModel currentBooking,
   }) {
     _currentBooking = currentBooking;
+    if (authToken.isNotEmpty) {
+      _authToken = authToken;
+    }
     _isConnected = true;
     _lastDriver = currentBooking.driver;
 
@@ -49,6 +55,9 @@ class ReverbSocketService {
   }
 
   String _buildWsUrl() {
+    if (AppConstants.configuredWsUrl.isNotEmpty) {
+      return AppConstants.configuredWsUrl;
+    }
     final isSecureWeb = kIsWeb && Uri.base.scheme == 'https';
     final useTls = AppConstants.reverbUseTls ||
         isSecureWeb ||
@@ -56,10 +65,11 @@ class ReverbSocketService {
     final scheme = useTls ? 'wss' : 'ws';
     final host = AppConstants.reverbHost;
     final port = AppConstants.reverbPort;
-    if (useTls && (port == 443 || port == 80)) {
-      return '$scheme://$host';
+    final path = '/app/${AppConstants.reverbAppKey}';
+    if ((useTls && (port == 443 || port == 80)) || (!useTls && port == 80)) {
+      return '$scheme://$host$path';
     }
-    return '$scheme://$host:$port';
+    return '$scheme://$host:$port$path';
   }
 
   void _connectRealSocket(String bookingId) {
@@ -90,23 +100,20 @@ class ReverbSocketService {
 
       debugPrint('✅ [User WS] Connected to backend WebSocket server');
 
-      // Subscribe to booking channels (both ID and reference forms)
-      final channels = <String>{
+      // Subscribe to public broadcast immediately; authorize private channels after connection_established
+      _pendingChannels = <String>[
         'private-bookings.$bookingId',
         'private-booking.$bookingId',
         if (_currentBooking != null && _currentBooking!.referenceNumber.isNotEmpty) ...[
           'private-bookings.${_currentBooking!.referenceNumber}',
           'private-booking.${_currentBooking!.referenceNumber}',
         ],
-        'emergency-broadcasts',
-      };
+      ];
 
-      for (final ch in channels) {
-        channel.sink.add(jsonEncode({
-          'event': 'pusher:subscribe',
-          'data': {'channel': ch},
-        }));
-      }
+      channel.sink.add(jsonEncode({
+        'event': 'pusher:subscribe',
+        'data': {'channel': 'emergency-broadcasts'},
+      }));
 
       _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
         if (!identical(_channel, channel)) return;
@@ -129,6 +136,14 @@ class ReverbSocketService {
               try {
                 eventData = jsonDecode(eventData);
               } catch (_) {}
+            }
+
+            if (eventName == 'pusher:connection_established' && eventData is Map) {
+              final sid = eventData['socket_id']?.toString();
+              if (sid != null && sid.isNotEmpty) {
+                _authorizeAndSubscribePrivateChannels(channel, sid);
+              }
+              return;
             }
 
             Map<String, dynamic> payload = {};
@@ -158,6 +173,47 @@ class ReverbSocketService {
       debugPrint('⚠️ [User WS] Could not connect to real backend WS: $e');
       _scheduleReconnect(bookingId);
     }
+  }
+
+  Future<void> _authorizeAndSubscribePrivateChannels(
+    WebSocketChannel channel,
+    String socketId,
+  ) async {
+    if (!identical(_channel, channel)) return;
+    final token = _authToken;
+    if (token == null || token.isEmpty || socketId.isEmpty) return;
+
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 6),
+      receiveTimeout: const Duration(seconds: 6),
+    ));
+    final authUrl = '${AppConstants.defaultBaseUrl}/broadcasting/auth';
+
+    for (final ch in _pendingChannels.toSet()) {
+      if (!identical(_channel, channel)) break;
+      try {
+        final resp = await dio.post(
+          authUrl,
+          data: {'channel_name': ch, 'socket_id': socketId},
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+        final auth = (resp.data is Map) ? resp.data['auth']?.toString() : null;
+        if (auth != null && auth.isNotEmpty && identical(_channel, channel)) {
+          channel.sink.add(jsonEncode({
+            'event': 'pusher:subscribe',
+            'data': {
+              'channel': ch,
+              'auth': auth,
+              if (resp.data['channel_data'] != null)
+                'channel_data': resp.data['channel_data'],
+            },
+          }));
+        }
+      } catch (e) {
+        debugPrint('⚠️ [User WS] Auth failed for $ch: $e');
+      }
+    }
+    dio.close();
   }
 
   int _reconnectAttempts = 0;

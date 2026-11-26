@@ -20,11 +20,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   void initState() {
     super.initState();
     // Prompt, clean transition to HomeScreen or LoginScreen without bouncy animations
-    _navTimer = Timer(const Duration(milliseconds: 1200), () {
+    _navTimer = Timer(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;
       final storage = ref.read(storageServiceProvider);
       final savedUser = storage.getUser();
-      final bool isAlreadyRegistered = savedUser != null && savedUser.phone.isNotEmpty;
+      final token = await storage.getToken();
+      final bool isAlreadyRegistered =
+          savedUser != null && savedUser.phone.isNotEmpty && token != null && token.isNotEmpty;
 
       final targetScreen = isAlreadyRegistered ? const HomeScreen() : const LoginScreen();
 

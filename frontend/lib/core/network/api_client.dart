@@ -216,18 +216,25 @@ class ApiClient {
     }
   }
 
-  /// Verify user login with registered mobile number and SIM verification
+  /// Verify user login with registered mobile number and physical SIM verification
   Future<Map<String, dynamic>> loginUser(
     String phone, {
     String? name,
     String? simNumber,
+    List<String>? simNumbers,
+    bool? hasSim,
+    bool? hasPermission,
     String? carrier,
   }) async {
     try {
       final payload = <String, dynamic>{
         'phone': phone,
+        'platform': kIsWeb ? 'web' : Platform.operatingSystem,
         if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
         if (simNumber != null && simNumber.trim().isNotEmpty) 'sim_number': simNumber.trim(),
+        if (simNumbers != null && simNumbers.isNotEmpty) 'sim_numbers': simNumbers,
+        if (hasSim != null) 'has_sim': hasSim,
+        if (hasPermission != null) 'has_permission': hasPermission,
         if (carrier != null && carrier.trim().isNotEmpty) 'carrier': carrier.trim(),
       };
       final response = await _executeWithFailover(
@@ -263,6 +270,13 @@ class ApiClient {
     }
   }
 
+  /// Revoke current user token on logout
+  Future<void> logoutUser() async {
+    try {
+      await _dio.post('/user/auth/logout');
+    } catch (_) {}
+  }
+
   /// Register new emergency user profile
   Future<Map<String, dynamic>> registerUser({
     required String name,
@@ -275,7 +289,7 @@ class ApiClient {
         () => _dio.post('/user/auth/register', data: {
           'name': name,
           'phone': phone,
-          'blood_group': bloodGroup ?? 'O+',
+          'blood_group': bloodGroup ?? '',
           'emergency_notes': emergencyNotes ?? '',
         }),
       );

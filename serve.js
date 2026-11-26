@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
@@ -125,6 +126,21 @@ const server = http.createServer((req, res) => {
       res.end('404 Not Found');
     }
   }
+});
+
+server.on('upgrade', (req, socket, head) => {
+  const target = net.connect(8080, '127.0.0.1', () => {
+    const headerLines = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
+    for (const [k, v] of Object.entries(req.headers)) {
+      headerLines.push(`${k}: ${v}`);
+    }
+    target.write(headerLines.join('\r\n') + '\r\n\r\n');
+    if (head && head.length) target.write(head);
+    target.pipe(socket);
+    socket.pipe(target);
+  });
+  target.on('error', () => socket.destroy());
+  socket.on('error', () => target.destroy());
 });
 
 server.listen(PORT, '0.0.0.0', () => {

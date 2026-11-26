@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/sim_detection_service.dart';
 import '../../../core/services/sms_otp_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../models/emergency_contact_model.dart';
@@ -135,6 +136,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String phone, {
     String? name,
     String? simNumber,
+    List<String>? simNumbers,
+    bool? hasSim,
+    bool? hasPermission,
     String? carrier,
   }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -160,6 +164,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         tenDigit,
         name: trimmedName.isNotEmpty ? trimmedName : null,
         simNumber: simNumber,
+        simNumbers: simNumbers,
+        hasSim: hasSim,
+        hasPermission: hasPermission,
         carrier: carrier,
       );
       if (res['status'] == 'success' && res['user'] != null) {
@@ -287,7 +294,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// 1-Tap Direct SIM Mobile Number Sign In (No OTP code required for emergency user)
+  /// Direct SIM Mobile Number Sign In (Strictly requires verified device SIM)
   Future<bool> signInWithPhoneNumber(String phone, {String? name}) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
@@ -302,87 +309,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return false;
     }
-    final formattedPhone = '+91 $tenDigit';
 
-    // 1. Check local storage
-    var existing = _storageService.getRegisteredUserByPhone(tenDigit);
-    if (existing == null || existing.name.trim().isEmpty) {
-      final lastUser = _storageService.getUser();
-      if (lastUser != null && lastUser.phone.replaceAll(RegExp(r'\D'), '').endsWith(tenDigit)) {
-        existing = lastUser;
-      }
-    }
-
-    // 2. Query dispatch server if local record has no name
-    if (existing == null || existing.name.trim().isEmpty) {
-      try {
-        final res = await _apiClient.lookupUser(tenDigit);
-        if (res != null && res['status'] == 'success' && res['exists'] == true && res['user'] != null) {
-          final u = res['user'];
-          existing = UserModel(
-            id: (u['id'] ?? 'usr-$tenDigit').toString(),
-            name: (u['name'] ?? '').toString(),
-            phone: (u['phone'] ?? formattedPhone).toString(),
-            bloodGroup: u['blood_group']?.toString(),
-            emergencyNotes: u['emergency_notes']?.toString(),
-          );
-        }
-      } catch (_) {}
-    }
-
-    final trimmedInputName = name?.trim() ?? '';
-    final resolvedName = trimmedInputName.isNotEmpty
-        ? trimmedInputName
-        : (existing != null && existing.name.trim().isNotEmpty ? existing.name.trim() : '');
-
-    // Authenticate directly against Laravel dispatch backend to obtain a real token
-    try {
-      final res = await _apiClient.loginUser(
-        tenDigit,
-        name: resolvedName.isNotEmpty ? resolvedName : null,
-      );
-      if (res['status'] == 'success') {
-        final u = res['user'] is Map ? res['user'] as Map : null;
-        final serverUser = UserModel(
-          id: (u?['id'] ?? existing?.id ?? 'usr-$tenDigit').toString(),
-          name: (u?['name']?.toString().trim().isNotEmpty == true)
-              ? u!['name'].toString().trim()
-              : resolvedName,
-          phone: (u?['phone'] ?? formattedPhone).toString(),
-          bloodGroup: u?['blood_group']?.toString() ?? existing?.bloodGroup,
-          emergencyNotes: u?['emergency_notes']?.toString() ?? existing?.emergencyNotes,
-        );
-
-        await _storageService.saveUser(serverUser);
-        await _storageService.saveRegisteredUserByPhone(serverUser);
-        await _storageService.saveLastRegisteredPhone(tenDigit);
-        if (res['token'] != null && res['token'].toString().isNotEmpty) {
-          await _storageService.saveToken(res['token'].toString());
-        }
-
-        state = state.copyWith(
-          user: serverUser,
-          currentPhone: serverUser.phone,
-          isLoading: false,
-          isOtpSent: false,
-        );
-        return true;
-      }
+    final simCheck = await SimDetectionService.verifyDeviceSim(
+      enteredPhone: tenDigit,
+      isTamil: state.selectedLocale == 'ta',
+      requestPermissionIfNeeded: true,
+    );
+    if (!simCheck.isValid) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: res['message']?.toString() ?? 'Unable to verify user session.',
-      );
-      return false;
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: 'Unable to reach dispatch server. Check your connection.',
+        errorMessage: simCheck.errorMessage ?? 'Device SIM card verification failed.',
       );
       return false;
     }
+
+    return loginWithPhone(
+      tenDigit,
+      name: name,
+      simNumber: simCheck.detectedSimNumber,
+      simNumbers: simCheck.detectedSimNumbers,
+      hasSim: simCheck.hasSim,
+      hasPermission: simCheck.hasPermission,
+      carrier: simCheck.carrier,
+    );
   }
 
-  /// 1-Tap Emergency Quick Access using genuine recognized SIM mobile number (Immediate SOS)
+  /// Legacy guest method routed strictly through device SIM verification
   Future<bool> signInAsEmergencyGuest({
     required String genuineSimPhone,
     String? callerName,
@@ -567,6 +519,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Logout
   Future<void> logout() async {
+    await _apiClient.logoutUser();
     await _storageService.clearToken();
     await _storageService.clearUser();
     state = AuthState(
