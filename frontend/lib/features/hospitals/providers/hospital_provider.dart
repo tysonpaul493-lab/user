@@ -90,22 +90,28 @@ class HospitalState {
       return true;
     }).toList();
 
-    final finalResult = (result.isEmpty && q.isEmpty && (selectedFilter == null || selectedFilter == 'All')) ? hospitals : result;
+    final List<HospitalModel> finalResult = List<HospitalModel>.from(
+      (result.isEmpty && q.isEmpty && (selectedFilter == null || selectedFilter == 'All'))
+          ? hospitals
+          : result,
+    );
 
     // Sort by real proximity, giving priority boost to nearby government hospitals within 25km
-    finalResult.sort((a, b) {
-      final distA = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
-          ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, a.lat, a.lng)
-          : a.distanceKm;
-      final distB = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
-          ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, b.lat, b.lng)
-          : b.distanceKm;
-      final aGov = a.isGovernment && distA <= 25.0;
-      final bGov = b.isGovernment && distB <= 25.0;
-      if (aGov && !bGov) return -1;
-      if (!aGov && bGov) return 1;
-      return distA.compareTo(distB);
-    });
+    if (finalResult.length > 1) {
+      finalResult.sort((a, b) {
+        final distA = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
+            ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, a.lat, a.lng)
+            : a.distanceKm;
+        final distB = (userLat != null && userLng != null && userLat != 0.0 && userLng != 0.0)
+            ? LocationService.calculateDrivingDistanceKm(userLat!, userLng!, b.lat, b.lng)
+            : b.distanceKm;
+        final aGov = a.isGovernment && distA <= 25.0;
+        final bGov = b.isGovernment && distB <= 25.0;
+        if (aGov && !bGov) return -1;
+        if (!aGov && bGov) return 1;
+        return distA.compareTo(distB);
+      });
+    }
     return finalResult;
   }
 

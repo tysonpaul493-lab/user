@@ -16,6 +16,9 @@ import 'package:emergency_user/features/booking/providers/booking_provider.dart'
 import 'package:emergency_user/shared/widgets/header_location_pill.dart';
 import 'package:emergency_user/shared/widgets/route_progress_bar.dart';
 import 'package:emergency_user/features/auth/screens/login_screen.dart';
+import 'package:emergency_user/features/home/screens/home_screen.dart';
+import 'package:emergency_user/features/hospitals/providers/hospital_provider.dart';
+import 'package:emergency_user/models/hospital_model.dart';
 import 'package:latlong2/latlong.dart';
 
 void main() {
@@ -428,6 +431,67 @@ void main() {
         final loadedHistory = storage.getBookingHistory();
         expect(loadedHistory.length, 1);
         expect(loadedHistory.first.id, 'bk-test-101');
+      },
+    );
+
+    testWidgets(
+      '11. HomeScreen renders post-login without UnsupportedError when hospitals list is empty or unmodifiable',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        FlutterSecureStorage.setMockInitialValues({});
+        final storage = await StorageService.init();
+        await storage.saveUser(
+          UserModel(
+            id: 'usr-9876501234',
+            name: 'Test Patient',
+            phone: '+91 9876501234',
+          ),
+        );
+        await storage.saveToken('tok-test');
+
+        // Directly verify HospitalState.filteredHospitals does not mutate/throw on unmodifiable lists
+        final emptyState = HospitalState();
+        expect(() => emptyState.filteredHospitals, returnsNormally);
+        expect(emptyState.filteredHospitals, isEmpty);
+
+        final unmodState = HospitalState(
+          hospitals: List<HospitalModel>.unmodifiable([
+            HospitalModel(
+              id: 'h1',
+              name: 'GH Chennai',
+              address: 'Chennai',
+              lat: 13.08,
+              lng: 80.27,
+              distanceKm: 2.0,
+              emergencyPhone: '044-25305000',
+              emergencyServices: const ['Emergency'],
+              estimatedDriveTime: '5 min',
+            ),
+            HospitalModel(
+              id: 'h2',
+              name: 'City Hospital',
+              address: 'Chennai',
+              lat: 13.09,
+              lng: 80.28,
+              distanceKm: 3.0,
+              emergencyPhone: '044-28290200',
+              emergencyServices: const ['ICU'],
+              estimatedDriveTime: '8 min',
+            ),
+          ]),
+        );
+        expect(() => unmodState.filteredHospitals, returnsNormally);
+        expect(unmodState.filteredHospitals.length, 2);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [storageServiceProvider.overrideWithValue(storage)],
+            child: const MaterialApp(home: HomeScreen()),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(HomeScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
       },
     );
   });
