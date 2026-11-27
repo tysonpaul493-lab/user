@@ -28,3 +28,9 @@ frontend/.packages
 frontend/.pub/
 frontend/build/
 flutter/
+frontend/android/key.properties
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example

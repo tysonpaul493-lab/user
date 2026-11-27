@@ -6,7 +6,9 @@ const path = require('path');
 const url = require('url');
 
 const PORT = process.env.PORT || 3003;
-const LOCAL_API_TARGET = 'http://127.0.0.1:8000';
+const LOCAL_API_TARGET = process.env.API_TARGET || 'http://127.0.0.1:8000';
+const WS_HOST = process.env.WS_HOST || '127.0.0.1';
+const WS_PORT = Number(process.env.WS_PORT || 8080);
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -129,7 +131,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.on('upgrade', (req, socket, head) => {
-  const target = net.connect(8080, '127.0.0.1', () => {
+  const target = net.connect(WS_PORT, WS_HOST, () => {
     const headerLines = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
     for (const [k, v] of Object.entries(req.headers)) {
       headerLines.push(`${k}: ${v}`);
